@@ -1,9 +1,13 @@
+import { useState } from 'react'
 import { AuthProvider } from '../features/auth/auth-provider'
 import { useAuth } from '../features/auth/auth-context'
 import { LoginPage } from '../features/auth/login-page'
+import { DrivePicker } from '../features/drive-picker/drive-picker'
+import type { DriveFile } from '../features/drive-picker/use-drive-files'
 
 function AppContent() {
-  const { user, loading, signOut } = useAuth()
+  const { user, loading, providerToken, signInWithGoogle, signOut } = useAuth()
+  const [selectedFile, setSelectedFile] = useState<DriveFile | null>(null)
 
   if (loading) {
     return (
@@ -32,10 +36,28 @@ function AppContent() {
           </button>
         </div>
       </header>
-      <main className="flex flex-1 items-center justify-center">
-        <p className="text-text-secondary">
-          Welcome! Select an RFP template from Google Drive to get started.
-        </p>
+      <main className="flex flex-1 flex-col items-center justify-center gap-6 px-4">
+        {selectedFile ? (
+          <div className="text-center">
+            <p className="text-sm text-text-secondary">Selected template:</p>
+            <p className="mt-1 text-lg font-medium text-text-primary">
+              {selectedFile.name}
+            </p>
+            <button
+              type="button"
+              onClick={() => setSelectedFile(null)}
+              className="mt-4 text-sm font-medium text-primary-dark hover:underline"
+            >
+              Choose a different template
+            </button>
+          </div>
+        ) : (
+          <DrivePicker
+            providerToken={providerToken}
+            onSelect={setSelectedFile}
+            onReconnect={signInWithGoogle}
+          />
+        )}
       </main>
     </div>
   )

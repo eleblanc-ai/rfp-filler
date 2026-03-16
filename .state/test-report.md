@@ -20,3 +20,18 @@ Added Google OAuth authentication via Supabase with @thinkcerca.com domain restr
 | 3 | `src/features/auth/auth-provider.test.tsx` | shows signed-in for allowed domain | ✅ Pass | @thinkcerca.com session accepted |
 | 4 | `src/features/auth/auth-provider.test.tsx` | rejects non-thinkcerca.com emails and signs out | ✅ Pass | Non-allowed domain triggers signOut |
 | 5 | `src/features/auth/auth-provider.test.tsx` | useAuth throws when used outside provider | ✅ Pass | Hook throws error outside AuthProvider |
+
+## Slice 3: Google Drive File Picker
+
+Added Google Drive file picker using the Drive API v3 with the user's OAuth provider token. Picker shows a toggle-open panel listing Google Docs with loading/empty/error/reconnect states.
+
+| # | File | Test name | Status | What it verifies |
+|---|------|-----------|--------|-----------------|
+| 1 | `src/features/drive-picker/drive-picker.test.tsx` | shows reconnect message when no provider token | ✅ Pass | Expired token shows reconnect UI |
+| 2 | `src/features/drive-picker/drive-picker.test.tsx` | calls onReconnect when reconnect button is clicked | ✅ Pass | Reconnect button triggers re-auth |
+| 3 | `src/features/drive-picker/drive-picker.test.tsx` | shows select button when closed | ✅ Pass | Initial state shows the open button |
+| 4 | `src/features/drive-picker/drive-picker.test.tsx` | fetches and shows files when opened | ✅ Pass | Opening picker calls fetchFiles, renders file list |
+| 5 | `src/features/drive-picker/drive-picker.test.tsx` | shows empty state when no files | ✅ Pass | No files shows appropriate message |
+| 6 | `src/features/drive-picker/drive-picker.test.tsx` | shows loading state | ✅ Pass | Loading indicator while fetching |
+| 7 | `src/features/drive-picker/drive-picker.test.tsx` | shows error state | ✅ Pass | Error message displayed on failure |
+| 8 | `src/features/drive-picker/drive-picker.test.tsx` | calls onSelect when a file is clicked | ✅ Pass | Clicking a file calls callback with file data |

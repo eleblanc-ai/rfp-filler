@@ -4,6 +4,7 @@ import { supabase } from '../../shared/config/supabase'
 import { AuthContext } from './auth-context'
 
 const ALLOWED_DOMAIN = 'thinkcerca.com'
+const PROVIDER_TOKEN_KEY = 'google_provider_token'
 
 function isAllowedDomain(email: string | undefined): boolean {
   if (!email) return false
@@ -12,6 +13,9 @@ function isAllowedDomain(email: string | undefined): boolean {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
+  const [providerToken, setProviderToken] = useState<string | null>(
+    () => sessionStorage.getItem(PROVIDER_TOKEN_KEY),
+  )
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -22,6 +26,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setSession(null)
         } else {
           setSession(newSession)
+          if (newSession?.provider_token) {
+            setProviderToken(newSession.provider_token)
+            sessionStorage.setItem(PROVIDER_TOKEN_KEY, newSession.provider_token)
+          }
         }
         setLoading(false)
       },
@@ -36,6 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       options: {
         redirectTo: window.location.origin,
         queryParams: { hd: ALLOWED_DOMAIN },
+        scopes: 'https://www.googleapis.com/auth/drive.readonly',
       },
     })
     if (error) {
@@ -46,6 +55,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signOut() {
     await supabase.auth.signOut()
     setSession(null)
+    setProviderToken(null)
+    sessionStorage.removeItem(PROVIDER_TOKEN_KEY)
   }
 
   return (
@@ -53,6 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         session,
         user: session?.user ?? null,
+        providerToken,
         loading,
         signInWithGoogle,
         signOut,

@@ -48,6 +48,7 @@ let capturedCallback: AuthCallback
 
 beforeEach(() => {
   vi.clearAllMocks()
+  sessionStorage.clear()
   mockOnAuthStateChange.mockImplementation((cb: AuthCallback) => {
     capturedCallback = cb
     return { data: { subscription: { unsubscribe: vi.fn() } } }
