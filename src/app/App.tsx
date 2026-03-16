@@ -1,15 +1,23 @@
-import { useState } from 'react'
 import { AuthProvider } from '../features/auth/auth-provider'
 import { useAuth } from '../features/auth/auth-context'
 import { LoginPage } from '../features/auth/login-page'
 import { DrivePicker } from '../features/drive-picker/drive-picker'
-import type { DriveFile } from '../features/drive-picker/use-drive-files'
+import { DocumentViewer } from '../features/document/document-viewer'
+import { useActiveDocument } from '../features/document/use-active-document'
 
 function AppContent() {
   const { user, loading, providerToken, signInWithGoogle, signOut } = useAuth()
-  const [selectedFile, setSelectedFile] = useState<DriveFile | null>(null)
+  const {
+    doc,
+    content,
+    loading: docLoading,
+    error: docError,
+    initialLoading,
+    selectDocument,
+    clearDocument,
+  } = useActiveDocument(providerToken, user?.id ?? null)
 
-  if (loading) {
+  if (loading || initialLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-surface">
         <p className="text-text-secondary">Loading...</p>
@@ -36,29 +44,24 @@ function AppContent() {
           </button>
         </div>
       </header>
-      <main className="flex flex-1 flex-col items-center justify-center gap-6 px-4">
-        {selectedFile ? (
-          <div className="text-center">
-            <p className="text-sm text-text-secondary">Selected template:</p>
-            <p className="mt-1 text-lg font-medium text-text-primary">
-              {selectedFile.name}
-            </p>
-            <button
-              type="button"
-              onClick={() => setSelectedFile(null)}
-              className="mt-4 text-sm font-medium text-primary-dark hover:underline"
-            >
-              Choose a different template
-            </button>
-          </div>
-        ) : (
+
+      {doc ? (
+        <DocumentViewer
+          content={content}
+          title={doc.title}
+          loading={docLoading}
+          error={docError}
+          onBack={clearDocument}
+        />
+      ) : (
+        <main className="flex flex-1 flex-col items-center justify-center gap-6 px-4">
           <DrivePicker
             providerToken={providerToken}
-            onSelect={setSelectedFile}
+            onSelect={(file) => selectDocument(file.id, file.name)}
             onReconnect={signInWithGoogle}
           />
-        )}
-      </main>
+        </main>
+      )}
     </div>
   )
 }

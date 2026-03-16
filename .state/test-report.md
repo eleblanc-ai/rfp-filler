@@ -35,3 +35,16 @@ Added Google Drive file picker using the Drive API v3 with the user's OAuth prov
 | 6 | `src/features/drive-picker/drive-picker.test.tsx` | shows loading state | ✅ Pass | Loading indicator while fetching |
 | 7 | `src/features/drive-picker/drive-picker.test.tsx` | shows error state | ✅ Pass | Error message displayed on failure |
 | 8 | `src/features/drive-picker/drive-picker.test.tsx` | calls onSelect when a file is clicked | ✅ Pass | Clicking a file calls callback with file data |
+
+## Slice 4: Document Viewer
+
+Added document viewer that fetches Google Doc content as HTML via Drive export API and renders it in an editable contentEditable container with a basic toolbar. Document references persisted in Supabase for reload on refresh.
+
+| # | File | Test name | Status | What it verifies |
+|---|------|-----------|--------|-----------------|
+| 1 | `src/features/document/document-viewer.test.tsx` | shows loading state | ✅ Pass | Loading message while content is fetching |
+| 2 | `src/features/document/document-viewer.test.tsx` | shows error state with back button | ✅ Pass | Error message + back link on failure |
+| 3 | `src/features/document/document-viewer.test.tsx` | renders document title and toolbar | ✅ Pass | Title, B/I/Undo buttons all present |
+| 4 | `src/features/document/document-viewer.test.tsx` | renders HTML content in the editor | ✅ Pass | HTML content rendered in contentEditable area |
+| 5 | `src/features/document/document-viewer.test.tsx` | calls onBack when back button is clicked | ✅ Pass | Back button triggers callback |
+| 6 | `src/features/document/document-viewer.test.tsx` | editor area is contentEditable | ✅ Pass | Editor div has contentEditable attribute |
