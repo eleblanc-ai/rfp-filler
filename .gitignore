@@ -1,15 +1,26 @@
-# Ignore everything by default — this is a framework repo
-/*
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# Allow framework files only
-!cosmo-instructions/
-!docs/
-!img/
-!VERSION
-!LICENSE
-!CLAUDE.md
-!.gitignore
+node_modules
+dist
+.env
+.env.local
+dist-ssr
+*.local
 
-# Personal notes
-todo
-todo-*
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
