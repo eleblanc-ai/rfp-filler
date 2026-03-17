@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { useKbDocuments, type KbDocument } from './use-kb-documents'
+import { extractPdfText } from './extract-pdf-text'
 
 interface KbPageProps {
   userId: string | null
@@ -41,6 +42,7 @@ export function KbPage({ userId, providerToken, onBack }: KbPageProps) {
     useKbDocuments(userId)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const [showDrivePicker, setShowDrivePicker] = useState(false)
   const [driveFiles, setDriveFiles] = useState<
     { id: string; name: string }[]
@@ -53,13 +55,28 @@ export function KbPage({ userId, providerToken, onBack }: KbPageProps) {
     if (!file) return
 
     setUploading(true)
+    setUploadError(null)
     try {
-      const text = await file.text()
+      let text: string
+      let contentType: string
+
+      if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+        text = await extractPdfText(file)
+        contentType = 'application/pdf'
+        if (!text.trim()) {
+          setUploadError('This PDF has no extractable text. Scanned or image-only PDFs are not supported.')
+          return
+        }
+      } else {
+        text = await file.text()
+        contentType = file.type || 'text/plain'
+      }
+
       const doc = await addDocument({
         filename: file.name,
         source: 'upload',
         rawText: text,
-        contentType: file.type || 'text/plain',
+        contentType,
       })
       if (doc) {
         indexDocument(doc.id)
@@ -156,7 +173,7 @@ export function KbPage({ userId, providerToken, onBack }: KbPageProps) {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".txt,.md,.csv"
+            accept=".txt,.md,.csv,.pdf"
             onChange={handleFileUpload}
             className="hidden"
             data-testid="file-input"
@@ -223,8 +240,8 @@ export function KbPage({ userId, providerToken, onBack }: KbPageProps) {
         )}
 
         {/* Error */}
-        {error && (
-          <p className="mb-4 text-sm text-red-600">{error}</p>
+        {(error || uploadError) && (
+          <p className="mb-4 text-sm text-red-600">{uploadError ?? error}</p>
         )}
 
         {/* Document list */}

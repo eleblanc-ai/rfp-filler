@@ -5,6 +5,7 @@ import { KbPage } from './kb-page'
 const mockAddDocument = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const mockDeleteDocument = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const mockIndexDocument = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const mockExtractPdfText = vi.hoisted(() => vi.fn().mockResolvedValue('extracted pdf text'))
 const mockDocuments = vi.hoisted(() => ({
   value: [] as Array<{
     id: string
@@ -27,12 +28,17 @@ vi.mock('./use-kb-documents', () => ({
   }),
 }))
 
+vi.mock('./extract-pdf-text', () => ({
+  extractPdfText: mockExtractPdfText,
+}))
+
 describe('KbPage', () => {
   beforeEach(() => {
     mockDocuments.value = []
     mockAddDocument.mockClear().mockResolvedValue(undefined)
     mockDeleteDocument.mockClear()
     mockIndexDocument.mockClear()
+    mockExtractPdfText.mockClear().mockResolvedValue('extracted pdf text')
   })
 
   test('shows empty state when no KB documents', () => {
@@ -187,5 +193,53 @@ describe('KbPage', () => {
     expect(screen.getByText('Error')).toBeInTheDocument()
     await userEvent.click(screen.getByText('Retry'))
     expect(mockIndexDocument).toHaveBeenCalledWith('doc-5')
+  })
+
+  test('PDF upload extracts text and calls addDocument with application/pdf', async () => {
+    mockAddDocument.mockResolvedValue({
+      id: 'pdf-doc-1',
+      filename: 'report.pdf',
+      source: 'upload',
+      status: 'pending',
+      chunk_count: 0,
+      created_at: '2026-03-17T00:00:00Z',
+    })
+
+    render(<KbPage userId="user-1" providerToken="token" onBack={vi.fn()} />)
+    const fileInput = screen.getByTestId('file-input')
+
+    const file = new File(['fake-pdf-bytes'], 'report.pdf', {
+      type: 'application/pdf',
+    })
+
+    await userEvent.upload(fileInput, file)
+
+    expect(mockExtractPdfText).toHaveBeenCalledWith(file)
+    expect(mockAddDocument).toHaveBeenCalledWith({
+      filename: 'report.pdf',
+      source: 'upload',
+      rawText: 'extracted pdf text',
+      contentType: 'application/pdf',
+    })
+    expect(mockIndexDocument).toHaveBeenCalledWith('pdf-doc-1')
+  })
+
+  test('PDF upload shows error when extracted text is empty', async () => {
+    mockExtractPdfText.mockResolvedValue('   ')
+
+    render(<KbPage userId="user-1" providerToken="token" onBack={vi.fn()} />)
+    const fileInput = screen.getByTestId('file-input')
+
+    const file = new File(['fake-pdf-bytes'], 'scanned.pdf', {
+      type: 'application/pdf',
+    })
+
+    await userEvent.upload(fileInput, file)
+
+    expect(mockExtractPdfText).toHaveBeenCalledWith(file)
+    expect(mockAddDocument).not.toHaveBeenCalled()
+    expect(
+      screen.getByText(/no extractable text/i),
+    ).toBeInTheDocument()
   })
 })

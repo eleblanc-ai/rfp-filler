@@ -134,3 +134,15 @@ Completed the core auto-fill generation loop. Users select sections from the rev
 | 4 | `src/features/document/document-viewer.test.tsx` | Regenerate button disabled while filling | ✅ Pass | Button disabled during active generation |
 | 5 | `src/features/document/use-active-document.test.ts` | fillSections calls generate edge function and returns results | ✅ Pass | Fill flow invokes edge function, maps results with originalText |
 | 6 | `src/features/document/use-active-document.test.ts` | regenerate bumps contentVersion and re-runs generation | ✅ Pass | Regenerate resets content, re-runs fill, canRegenerate stays true |
+
+## Slice 11: PDF KB Upload
+
+Added PDF upload support to the Knowledge Base using pdfjs-dist for client-side text extraction. KB page file input now accepts .pdf files, extracts text per page, and stores it for indexing. Scanned/image-only PDFs (empty text) are rejected with a clear error message.
+
+| # | File | Test name | Status | What it verifies |
+|---|------|-----------|--------|-----------------|
+| 1 | `src/features/knowledge-base/extract-pdf-text.test.ts` | extracts text from a single-page PDF | ✅ Pass | Reads one page, joins text items |
+| 2 | `src/features/knowledge-base/extract-pdf-text.test.ts` | extracts and joins text from multiple pages | ✅ Pass | Multi-page concatenation with double newline separator |
+| 3 | `src/features/knowledge-base/extract-pdf-text.test.ts` | returns empty string for a PDF with no text | ✅ Pass | Empty items array returns empty string |
+| 4 | `src/features/knowledge-base/kb-page.test.tsx` | PDF upload extracts text and calls addDocument with application/pdf | ✅ Pass | PDF triggers extractPdfText, passes text to addDocument with correct contentType |
+| 5 | `src/features/knowledge-base/kb-page.test.tsx` | PDF upload shows error when extracted text is empty | ✅ Pass | Scanned PDF (empty text) shows error, addDocument not called |
