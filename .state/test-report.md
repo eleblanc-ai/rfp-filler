@@ -63,3 +63,14 @@ Added knowledge base management page with in-app document upload and Google Driv
 | 6 | `src/features/knowledge-base/kb-page.test.tsx` | import from Google Drive button is present | ✅ Pass | Drive import button visible |
 | 7 | `src/features/knowledge-base/kb-page.test.tsx` | back button calls onBack | ✅ Pass | Navigation back works |
 | 8 | `src/features/knowledge-base/kb-page.test.tsx` | shows source label for Drive-imported documents | ✅ Pass | Drive source shown on imported docs |
+
+## Slice 6: Document Indexing
+
+Renamed app to "RFP Buddy" and added document indexing infrastructure. Created a Supabase Edge Function that chunks KB documents (~500 words, 50-word overlap), generates OpenAI text-embedding-3-small embeddings, and stores them in kb_chunks with pgvector. KB page now shows real-time indexing status with auto-trigger on upload and manual Index/Retry buttons.
+
+| # | File | Test name | Status | What it verifies |
+|---|------|-----------|--------|-----------------|
+| 1 | `src/features/knowledge-base/kb-page.test.tsx` | uploaded file calls addDocument and triggers indexing | ✅ Pass | Upload triggers addDocument then indexDocument on returned doc |
+| 2 | `src/features/knowledge-base/kb-page.test.tsx` | shows Pending status badge for unindexed documents | ✅ Pass | Pending status renders badge + Index button |
+| 3 | `src/features/knowledge-base/kb-page.test.tsx` | shows Indexed status badge with chunk count | ✅ Pass | Indexed status shows chunk count |
+| 4 | `src/features/knowledge-base/kb-page.test.tsx` | shows Retry button for errored documents | ✅ Pass | Error status renders badge + Retry button triggers indexDocument |

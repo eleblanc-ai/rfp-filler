@@ -4,11 +4,14 @@ import { KbPage } from './kb-page'
 
 const mockAddDocument = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const mockDeleteDocument = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const mockIndexDocument = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const mockDocuments = vi.hoisted(() => ({
   value: [] as Array<{
     id: string
     filename: string
     source: string
+    status: string
+    chunk_count: number
     created_at: string
   }>,
 }))
@@ -20,14 +23,16 @@ vi.mock('./use-kb-documents', () => ({
     error: null,
     addDocument: mockAddDocument,
     deleteDocument: mockDeleteDocument,
+    indexDocument: mockIndexDocument,
   }),
 }))
 
 describe('KbPage', () => {
   beforeEach(() => {
     mockDocuments.value = []
-    mockAddDocument.mockClear()
+    mockAddDocument.mockClear().mockResolvedValue(undefined)
     mockDeleteDocument.mockClear()
+    mockIndexDocument.mockClear()
   })
 
   test('shows empty state when no KB documents', () => {
@@ -44,7 +49,9 @@ describe('KbPage', () => {
     expect(screen.getByText('Upload File')).toBeInTheDocument()
   })
 
-  test('uploaded file calls addDocument', async () => {
+  test('uploaded file calls addDocument and triggers indexing', async () => {
+    mockAddDocument.mockResolvedValue({ id: 'new-doc-1', filename: 'readme.txt', source: 'upload', status: 'pending', chunk_count: 0, created_at: '2026-03-17T00:00:00Z' })
+
     render(<KbPage userId="user-1" providerToken="token" onBack={vi.fn()} />)
     const fileInput = screen.getByTestId('file-input')
 
@@ -60,6 +67,7 @@ describe('KbPage', () => {
       rawText: 'test content',
       contentType: 'text/plain',
     })
+    expect(mockIndexDocument).toHaveBeenCalledWith('new-doc-1')
   })
 
   test('shows document list with delete button', async () => {
@@ -68,6 +76,8 @@ describe('KbPage', () => {
         id: 'doc-1',
         filename: 'proposal.txt',
         source: 'upload',
+        status: 'indexed',
+        chunk_count: 5,
         created_at: '2026-03-17T00:00:00Z',
       },
     ]
@@ -84,6 +94,8 @@ describe('KbPage', () => {
         id: 'doc-1',
         filename: 'proposal.txt',
         source: 'upload',
+        status: 'indexed',
+        chunk_count: 3,
         created_at: '2026-03-17T00:00:00Z',
       },
     ]
@@ -113,6 +125,8 @@ describe('KbPage', () => {
         id: 'doc-2',
         filename: 'company-info.txt',
         source: 'drive',
+        status: 'pending',
+        chunk_count: 0,
         created_at: '2026-03-17T00:00:00Z',
       },
     ]
@@ -121,7 +135,57 @@ describe('KbPage', () => {
     expect(screen.getByText('company-info.txt')).toBeInTheDocument()
     const allMatches = screen.getAllByText(/Google Drive/)
     expect(allMatches.length).toBeGreaterThanOrEqual(2)
-    // One is the import button, the other is the source label on the doc
     expect(screen.getByText(/Google Drive ·/)).toBeInTheDocument()
+  })
+
+  test('shows Pending status badge for unindexed documents', () => {
+    mockDocuments.value = [
+      {
+        id: 'doc-3',
+        filename: 'pending-doc.txt',
+        source: 'upload',
+        status: 'pending',
+        chunk_count: 0,
+        created_at: '2026-03-17T00:00:00Z',
+      },
+    ]
+
+    render(<KbPage userId="user-1" providerToken="token" onBack={vi.fn()} />)
+    expect(screen.getByText('Pending')).toBeInTheDocument()
+    expect(screen.getByText('Index')).toBeInTheDocument()
+  })
+
+  test('shows Indexed status badge with chunk count', () => {
+    mockDocuments.value = [
+      {
+        id: 'doc-4',
+        filename: 'indexed-doc.txt',
+        source: 'upload',
+        status: 'indexed',
+        chunk_count: 7,
+        created_at: '2026-03-17T00:00:00Z',
+      },
+    ]
+
+    render(<KbPage userId="user-1" providerToken="token" onBack={vi.fn()} />)
+    expect(screen.getByText('Indexed (7 chunks)')).toBeInTheDocument()
+  })
+
+  test('shows Retry button for errored documents', async () => {
+    mockDocuments.value = [
+      {
+        id: 'doc-5',
+        filename: 'errored-doc.txt',
+        source: 'upload',
+        status: 'error',
+        chunk_count: 0,
+        created_at: '2026-03-17T00:00:00Z',
+      },
+    ]
+
+    render(<KbPage userId="user-1" providerToken="token" onBack={vi.fn()} />)
+    expect(screen.getByText('Error')).toBeInTheDocument()
+    await userEvent.click(screen.getByText('Retry'))
+    expect(mockIndexDocument).toHaveBeenCalledWith('doc-5')
   })
 })

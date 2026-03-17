@@ -7,7 +7,7 @@ export function LoginPage() {
     <div className="flex min-h-screen flex-col items-center justify-center bg-surface px-4">
       <div className="w-full max-w-sm text-center">
         <h1 className="text-4xl font-semibold tracking-tight text-text-primary">
-          RFP Filler
+          RFP Buddy
         </h1>
         <p className="mt-3 text-text-secondary">
           Sign in with your ThinkCERCA account to get started

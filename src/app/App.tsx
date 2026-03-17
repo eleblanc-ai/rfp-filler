@@ -37,7 +37,7 @@ function AppContent() {
   return (
     <div className="flex min-h-screen flex-col bg-surface">
       <header className="flex items-center justify-between border-b border-border px-6 py-4">
-        <h1 className="text-lg font-semibold text-text-primary">RFP Filler</h1>
+        <h1 className="text-lg font-semibold text-text-primary">RFP Buddy</h1>
         <div className="flex items-center gap-4">
           <button
             type="button"

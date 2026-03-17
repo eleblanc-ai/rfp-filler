@@ -7,8 +7,37 @@ interface KbPageProps {
   onBack: () => void
 }
 
+function StatusBadge({ status, chunkCount }: { status: KbDocument['status']; chunkCount: number }) {
+  switch (status) {
+    case 'indexing':
+      return (
+        <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs text-yellow-800">
+          Indexing...
+        </span>
+      )
+    case 'indexed':
+      return (
+        <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-800">
+          Indexed ({chunkCount} chunks)
+        </span>
+      )
+    case 'error':
+      return (
+        <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-800">
+          Error
+        </span>
+      )
+    default:
+      return (
+        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+          Pending
+        </span>
+      )
+  }
+}
+
 export function KbPage({ userId, providerToken, onBack }: KbPageProps) {
-  const { documents, loading, error, addDocument, deleteDocument } =
+  const { documents, loading, error, addDocument, deleteDocument, indexDocument } =
     useKbDocuments(userId)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
@@ -26,12 +55,15 @@ export function KbPage({ userId, providerToken, onBack }: KbPageProps) {
     setUploading(true)
     try {
       const text = await file.text()
-      await addDocument({
+      const doc = await addDocument({
         filename: file.name,
         source: 'upload',
         rawText: text,
         contentType: file.type || 'text/plain',
       })
+      if (doc) {
+        indexDocument(doc.id)
+      }
     } catch {
       // error is set by hook
     } finally {
@@ -83,7 +115,7 @@ export function KbPage({ userId, providerToken, onBack }: KbPageProps) {
       if (!response.ok) throw new Error('Failed to export document')
 
       const text = await response.text()
-      await addDocument({
+      const doc = await addDocument({
         filename: fileName,
         source: 'drive',
         rawText: text,
@@ -92,6 +124,9 @@ export function KbPage({ userId, providerToken, onBack }: KbPageProps) {
       })
       setShowDrivePicker(false)
       setDriveFiles([])
+      if (doc) {
+        indexDocument(doc.id)
+      }
     } catch {
       // error is set by hook
     } finally {
@@ -211,23 +246,37 @@ export function KbPage({ userId, providerToken, onBack }: KbPageProps) {
                 key={doc.id}
                 className="flex items-center justify-between px-4 py-3"
               >
-                <div>
-                  <p className="text-sm font-medium text-text-primary">
-                    {doc.filename}
-                  </p>
-                  <p className="text-xs text-text-secondary">
-                    {doc.source === 'drive' ? 'Google Drive' : 'Uploaded'} ·{' '}
-                    {new Date(doc.created_at).toLocaleDateString()}
-                  </p>
+                <div className="flex items-center gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-text-primary">
+                      {doc.filename}
+                    </p>
+                    <p className="text-xs text-text-secondary">
+                      {doc.source === 'drive' ? 'Google Drive' : 'Uploaded'} ·{' '}
+                      {new Date(doc.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <StatusBadge status={doc.status} chunkCount={doc.chunk_count} />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => deleteDocument(doc.id)}
-                  className="text-sm text-red-500 hover:text-red-700"
-                  aria-label={`Delete ${doc.filename}`}
-                >
-                  Delete
-                </button>
+                <div className="flex items-center gap-2">
+                  {(doc.status === 'pending' || doc.status === 'error') && (
+                    <button
+                      type="button"
+                      onClick={() => indexDocument(doc.id)}
+                      className="text-sm text-primary-dark hover:underline"
+                    >
+                      {doc.status === 'error' ? 'Retry' : 'Index'}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => deleteDocument(doc.id)}
+                    className="text-sm text-red-500 hover:text-red-700"
+                    aria-label={`Delete ${doc.filename}`}
+                  >
+                    Delete
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
