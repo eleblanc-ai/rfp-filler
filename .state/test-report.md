@@ -74,3 +74,17 @@ Renamed app to "RFP Buddy" and added document indexing infrastructure. Created a
 | 2 | `src/features/knowledge-base/kb-page.test.tsx` | shows Pending status badge for unindexed documents | ✅ Pass | Pending status renders badge + Index button |
 | 3 | `src/features/knowledge-base/kb-page.test.tsx` | shows Indexed status badge with chunk count | ✅ Pass | Indexed status shows chunk count |
 | 4 | `src/features/knowledge-base/kb-page.test.tsx` | shows Retry button for errored documents | ✅ Pass | Error status renders badge + Retry button triggers indexDocument |
+
+## Slice 7: Recent Documents
+
+Added recent documents list to main page showing up to 5 recently opened RFP templates with click-to-reopen. Old entries pruned beyond the limit. Removed auto-open on login. Added expired Google token detection (401/403).
+
+| # | File | Test name | Status | What it verifies |
+|---|------|-----------|--------|-----------------|
+| 1 | `src/features/document/use-active-document.test.ts` | returns empty recentDocuments initially when no userId | ✅ Pass | No userId = empty recent list |
+| 2 | `src/features/document/use-active-document.test.ts` | does not auto-open a document on init | ✅ Pass | Recent docs load but no doc auto-opened |
+| 3 | `src/features/document/use-active-document.test.ts` | loads recent documents on init when userId is provided | ✅ Pass | Hook fetches and populates recent docs on mount |
+| 4 | `src/features/document/use-active-document.test.ts` | selectDocument fetches content and upserts to database | ✅ Pass | Drive content fetched, DB upserted |
+| 5 | `src/features/document/use-active-document.test.ts` | selectDocument prunes old documents beyond limit of 5 | ✅ Pass | 6th document gets deleted after select |
+| 6 | `src/features/document/use-active-document.test.ts` | clearDocument resets doc, content, and error | ✅ Pass | Local state cleared on close |
+| 7 | `src/features/document/use-active-document.test.ts` | shows error when providerToken is missing | ✅ Pass | Expired token shows error message |

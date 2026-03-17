@@ -17,6 +17,7 @@ function AppContent() {
     loading: docLoading,
     error: docError,
     initialLoading,
+    recentDocuments,
     selectDocument,
     clearDocument,
   } = useActiveDocument(providerToken, user?.id ?? null)
@@ -78,6 +79,29 @@ function AppContent() {
             onSelect={(file) => selectDocument(file.id, file.name)}
             onReconnect={signInWithGoogle}
           />
+          {recentDocuments.length > 0 && (
+            <div className="w-full max-w-md">
+              <h2 className="mb-3 text-sm font-medium text-text-secondary">
+                Recent documents
+              </h2>
+              <ul className="divide-y divide-border rounded-lg border border-border bg-white">
+                {recentDocuments.map((rd) => (
+                  <li key={rd.google_doc_id}>
+                    <button
+                      type="button"
+                      onClick={() => selectDocument(rd.google_doc_id, rd.title)}
+                      className="flex w-full items-center justify-between px-4 py-3 text-left text-sm text-text-primary hover:bg-surface-secondary"
+                    >
+                      <span className="truncate">{rd.title}</span>
+                      <span className="ml-3 shrink-0 text-xs text-text-secondary">
+                        {new Date(rd.updated_at).toLocaleDateString()}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </main>
       )}
     </div>

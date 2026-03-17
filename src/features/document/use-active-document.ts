@@ -1,9 +1,17 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../shared/config/supabase'
 
+const MAX_RECENT = 5
+
 interface SelectedDoc {
   googleDocId: string
   title: string
+}
+
+export interface RecentDocument {
+  google_doc_id: string
+  title: string
+  updated_at: string
 }
 
 export function useActiveDocument(
@@ -15,6 +23,25 @@ export function useActiveDocument(
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [initialLoading, setInitialLoading] = useState(true)
+  const [recentDocuments, setRecentDocuments] = useState<RecentDocument[]>([])
+
+  async function loadRecent() {
+    if (!userId) return
+    try {
+      const { data } = await supabase
+        .from('documents')
+        .select('google_doc_id, title, updated_at')
+        .eq('user_id', userId)
+        .order('updated_at', { ascending: false })
+        .limit(MAX_RECENT)
+
+      if (data) {
+        setRecentDocuments(data)
+      }
+    } catch {
+      // best-effort
+    }
+  }
 
   useEffect(() => {
     if (!userId) {
@@ -22,26 +49,7 @@ export function useActiveDocument(
       return
     }
 
-    async function loadLast() {
-      try {
-        const { data } = await supabase
-          .from('documents')
-          .select('google_doc_id, title')
-          .order('updated_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
-
-        if (data && providerToken) {
-          await fetchContent(data.google_doc_id, data.title)
-        }
-      } catch {
-        // documents table may not exist yet — silently skip
-      } finally {
-        setInitialLoading(false)
-      }
-    }
-
-    loadLast()
+    loadRecent().finally(() => setInitialLoading(false))
   }, [userId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function fetchContent(googleDocId: string, title: string) {
@@ -61,6 +69,10 @@ export function useActiveDocument(
         { headers: { Authorization: `Bearer ${providerToken}` } },
       )
 
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('Google Drive access expired. Sign in again to reload.')
+      }
+
       if (!response.ok) {
         throw new Error('Failed to load document from Google Drive')
       }
@@ -72,6 +84,24 @@ export function useActiveDocument(
       setError(err instanceof Error ? err.message : 'Failed to load document')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function pruneOldDocuments() {
+    if (!userId) return
+    try {
+      const { data: all } = await supabase
+        .from('documents')
+        .select('id, updated_at')
+        .eq('user_id', userId)
+        .order('updated_at', { ascending: false })
+
+      if (all && all.length > MAX_RECENT) {
+        const idsToDelete = all.slice(MAX_RECENT).map((d) => d.id)
+        await supabase.from('documents').delete().in('id', idsToDelete)
+      }
+    } catch {
+      // best-effort
     }
   }
 
@@ -90,6 +120,8 @@ export function useActiveDocument(
           },
           { onConflict: 'user_id,google_doc_id' },
         )
+        await pruneOldDocuments()
+        await loadRecent()
       } catch {
         // Supabase persistence is best-effort
       }
@@ -108,6 +140,7 @@ export function useActiveDocument(
     loading,
     error,
     initialLoading,
+    recentDocuments,
     selectDocument,
     clearDocument,
   }
