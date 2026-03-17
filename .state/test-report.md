@@ -99,3 +99,25 @@ Added local file upload that creates a Google Doc in the user's Drive and displa
 | 2 | `src/features/document/use-active-document.test.ts` | uploadFromComputer shows error when no token | ✅ Pass | Missing providerToken shows expired-token error |
 | 3 | `src/features/document/use-active-document.test.ts` | removeRecentDocument deletes from Supabase and refreshes list | ✅ Pass | Calls Supabase delete with correct google_doc_id, refreshes recent list |
 | 4 | `src/features/document/document-viewer.test.tsx` | renders View in Drive link | ✅ Pass | "View in Drive" link present with correct href |
+
+## Slice 9: Auto-Fill Identify + Review
+
+Added the first half of the AI auto-fill flow. A new Edge Function sends document HTML to Claude for semantic analysis, returning 3-10 grouped sections with nested items. Results display in a resizable accordion-style side panel with sticky buttons, independent scrolling, collapsed-by-default sections, and sessionStorage persistence across refresh.
+
+| # | File | Test name | Status | What it verifies |
+|---|------|-----------|--------|-----------------|
+| 1 | `src/features/document/document-viewer.test.tsx` | renders Auto-Fill button in toolbar | ✅ Pass | Auto-Fill button present in toolbar |
+| 2 | `src/features/document/document-viewer.test.tsx` | Auto-Fill button calls onAutoFill | ✅ Pass | Clicking Auto-Fill triggers callback |
+| 3 | `src/features/document/document-viewer.test.tsx` | Auto-Fill button shows status text when filling | ✅ Pass | Shows "Analyzing document..." during fill |
+| 4 | `src/features/document/document-viewer.test.tsx` | shows section review panel when pendingSections exist | ✅ Pass | Accordion panel renders with sections, items, buttons |
+| 5 | `src/features/document/document-viewer.test.tsx` | toggling an item checkbox calls onToggleItem | ✅ Pass | Item checkbox fires callback |
+| 6 | `src/features/document/document-viewer.test.tsx` | toggling section checkbox calls onToggleSection | ✅ Pass | Parent checkbox fires callback |
+| 7 | `src/features/document/document-viewer.test.tsx` | clicking expand arrow calls onToggleExpand | ✅ Pass | Expand/collapse toggle fires callback |
+| 8 | `src/features/document/document-viewer.test.tsx` | collapsed section hides items | ✅ Pass | Items hidden when collapsed |
+| 9 | `src/features/document/document-viewer.test.tsx` | Cancel button clears sections | ✅ Pass | Cancel fires onCancelSections |
+| 10 | `src/features/document/document-viewer.test.tsx` | shows inline error banner when error with content | ✅ Pass | Inline error banner |
+| 11 | `src/features/document/use-active-document.test.ts` | identifySections calls edge function and populates pendingSections | ✅ Pass | Edge function invoked, nested sections mapped |
+| 12 | `src/features/document/use-active-document.test.ts` | identifySections shows error when no document is open | ✅ Pass | Error when no doc |
+| 13 | `src/features/document/use-active-document.test.ts` | cancelSections clears pendingSections | ✅ Pass | Sections cleared |
+| 14 | `src/features/document/use-active-document.test.ts` | restores doc, content, and pendingSections from sessionStorage | ✅ Pass | State restored on mount |
+| 15 | `src/features/document/use-active-document.test.ts` | clearDocument removes sessionStorage | ✅ Pass | Storage cleared on doc close |

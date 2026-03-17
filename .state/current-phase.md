@@ -1,3 +1,3 @@
-## Phase 4: Approve
+## Phase 2: Planning
 
-Slice 8: Upload from Computer + View in Drive — approved. Ready for next slice.
+Ready to plan Slice 10.

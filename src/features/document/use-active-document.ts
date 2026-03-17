@@ -2,6 +2,37 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../shared/config/supabase'
 
 const MAX_RECENT = 5
+const SESSION_KEY = 'rfp-buddy-active-doc'
+
+interface SessionState {
+  doc: SelectedDoc
+  content: string
+  pendingSections: PendingSection[]
+}
+
+function saveSession(doc: SelectedDoc | null, content: string | null, sections: PendingSection[]) {
+  try {
+    if (doc && content) {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify({ doc, content, pendingSections: sections }))
+    } else {
+      sessionStorage.removeItem(SESSION_KEY)
+    }
+  } catch {
+    // best-effort
+  }
+}
+
+function loadSession(): SessionState | null {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (parsed?.doc?.googleDocId && parsed?.content) return parsed as SessionState
+  } catch {
+    // best-effort
+  }
+  return null
+}
 
 interface SelectedDoc {
   googleDocId: string
@@ -14,17 +45,38 @@ export interface RecentDocument {
   updated_at: string
 }
 
+export interface PendingItem {
+  id: string
+  label: string
+  prompt: string
+  selected: boolean
+}
+
+export interface PendingSection {
+  id: string
+  location: string
+  items: PendingItem[]
+  expanded: boolean
+}
+
 export function useActiveDocument(
   providerToken: string | null,
   userId: string | null,
 ) {
-  const [doc, setDoc] = useState<SelectedDoc | null>(null)
-  const [content, setContent] = useState<string | null>(null)
+  const [doc, setDoc] = useState<SelectedDoc | null>(() => loadSession()?.doc ?? null)
+  const [content, setContent] = useState<string | null>(() => loadSession()?.content ?? null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [initialLoading, setInitialLoading] = useState(true)
   const [recentDocuments, setRecentDocuments] = useState<RecentDocument[]>([])
+  const [pendingSections, setPendingSections] = useState<PendingSection[]>(() => loadSession()?.pendingSections ?? [])
+  const [filling, setFilling] = useState(false)
+  const [fillStatus, setFillStatus] = useState<string | null>(null)
 
+  // Persist doc, content, and pendingSections to sessionStorage
+  useEffect(() => {
+    saveSession(doc, content, pendingSections)
+  }, [doc, content, pendingSections])
   async function loadRecent() {
     if (!userId) return
     try {
@@ -216,6 +268,60 @@ export function useActiveDocument(
     setDoc(null)
     setContent(null)
     setError(null)
+    setPendingSections([])
+    setFilling(false)
+    setFillStatus(null)
+  }
+
+  async function identifySections() {
+    if (!content) {
+      setError('No document open to analyze.')
+      return
+    }
+
+    setFilling(true)
+    setFillStatus('Analyzing document...')
+    setError(null)
+
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke(
+        'auto-fill-identify',
+        { body: { html: content } },
+      )
+
+      if (fnError) {
+        throw new Error(fnError.message || 'Failed to analyze document')
+      }
+
+      const sections: PendingSection[] = (data.sections ?? []).map(
+        (s: { id: string; location: string; items: { id: string; label: string; prompt: string }[] }) => ({
+          id: s.id,
+          location: s.location,
+          expanded: false,
+          items: (s.items ?? []).map((item) => ({
+            ...item,
+            selected: true,
+          })),
+        }),
+      )
+
+      const totalItems = sections.reduce((sum, s) => sum + s.items.length, 0)
+      if (totalItems === 0) {
+        setError('No fillable sections found in this document.')
+        return
+      }
+
+      setPendingSections(sections)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to analyze document')
+    } finally {
+      setFilling(false)
+      setFillStatus(null)
+    }
+  }
+
+  function cancelSections() {
+    setPendingSections([])
   }
 
   return {
@@ -225,9 +331,15 @@ export function useActiveDocument(
     error,
     initialLoading,
     recentDocuments,
+    pendingSections,
+    filling,
+    fillStatus,
     selectDocument,
     uploadFromComputer,
     removeRecentDocument,
     clearDocument,
+    identifySections,
+    setPendingSections,
+    cancelSections,
   }
 }

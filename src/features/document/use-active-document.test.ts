@@ -1,6 +1,8 @@
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { useActiveDocument } from './use-active-document'
 
+const mockInvoke = vi.hoisted(() => vi.fn())
+
 const mockFrom = vi.hoisted(() => {
   const chain = {
     select: vi.fn().mockReturnThis(),
@@ -15,7 +17,7 @@ const mockFrom = vi.hoisted(() => {
 })
 
 vi.mock('../../shared/config/supabase', () => ({
-  supabase: { from: mockFrom },
+  supabase: { from: mockFrom, functions: { invoke: mockInvoke } },
 }))
 
 // Mock global fetch for Google Drive API
@@ -29,6 +31,7 @@ function chain() {
 describe('useActiveDocument', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    sessionStorage.clear()
 
     const c = chain()
     c.select.mockReturnThis()
@@ -275,5 +278,170 @@ describe('useActiveDocument', () => {
     expect(chain().eq).toHaveBeenCalledWith('google_doc_id', 'doc-1')
     expect(result.current.recentDocuments.length).toBe(1)
     expect(result.current.recentDocuments[0].google_doc_id).toBe('doc-2')
+  })
+
+  test('identifySections calls edge function and populates pendingSections', async () => {
+    chain().limit.mockReturnValue({ ...chain(), data: [] })
+
+    mockInvoke.mockResolvedValueOnce({
+      data: {
+        sections: [
+          {
+            id: 's1',
+            location: 'Section 1',
+            items: [
+              { id: 's1-1', label: 'Company Name', prompt: 'Describe your company' },
+              { id: 's1-2', label: 'Date', prompt: 'Provide date' },
+            ],
+          },
+          {
+            id: 's2',
+            location: 'Section 2',
+            items: [
+              { id: 's2-1', label: 'Technical approach', prompt: 'Technical approach' },
+            ],
+          },
+        ],
+      },
+      error: null,
+    })
+
+    const { result } = renderHook(() => useActiveDocument('token', 'user-1'))
+
+    await waitFor(() => {
+      expect(result.current.initialLoading).toBe(false)
+    })
+
+    // First open a document so content is set
+    await act(async () => {
+      await result.current.selectDocument('gdoc-1', 'Test RFP')
+    })
+
+    await act(async () => {
+      await result.current.identifySections()
+    })
+
+    expect(mockInvoke).toHaveBeenCalledWith('auto-fill-identify', {
+      body: { html: result.current.content },
+    })
+    expect(result.current.pendingSections).toHaveLength(2)
+    expect(result.current.pendingSections[0].items).toHaveLength(2)
+    expect(result.current.pendingSections[0].items[0].selected).toBe(true)
+    expect(result.current.pendingSections[0].expanded).toBe(false)
+    expect(result.current.pendingSections[0].location).toBe('Section 1')
+    expect(result.current.filling).toBe(false)
+  })
+
+  test('identifySections shows error when no document is open', async () => {
+    chain().limit.mockReturnValue({ ...chain(), data: [] })
+
+    const { result } = renderHook(() => useActiveDocument('token', 'user-1'))
+
+    await waitFor(() => {
+      expect(result.current.initialLoading).toBe(false)
+    })
+
+    await act(async () => {
+      await result.current.identifySections()
+    })
+
+    expect(result.current.error).toBe('No document open to analyze.')
+    expect(result.current.pendingSections).toHaveLength(0)
+  })
+
+  test('cancelSections clears pendingSections', async () => {
+    chain().limit.mockReturnValue({ ...chain(), data: [] })
+
+    mockInvoke.mockResolvedValueOnce({
+      data: {
+        sections: [
+          {
+            id: 's1',
+            location: 'Section 1',
+            items: [
+              { id: 's1-1', label: 'Company Name', prompt: 'Describe your company' },
+            ],
+          },
+        ],
+      },
+      error: null,
+    })
+
+    const { result } = renderHook(() => useActiveDocument('token', 'user-1'))
+
+    await waitFor(() => {
+      expect(result.current.initialLoading).toBe(false)
+    })
+
+    await act(async () => {
+      await result.current.selectDocument('gdoc-1', 'Test RFP')
+    })
+
+    await act(async () => {
+      await result.current.identifySections()
+    })
+
+    expect(result.current.pendingSections).toHaveLength(1)
+
+    act(() => {
+      result.current.cancelSections()
+    })
+
+    expect(result.current.pendingSections).toHaveLength(0)
+  })
+
+  test('restores doc, content, and pendingSections from sessionStorage', async () => {
+    const saved = {
+      doc: { googleDocId: 'gdoc-saved', title: 'Saved Doc' },
+      content: '<p>saved content</p>',
+      pendingSections: [
+        {
+          id: 's1',
+          location: 'Section 1',
+          expanded: false,
+          items: [{ id: 's1-1', label: 'Item', prompt: 'Do it', selected: true }],
+        },
+      ],
+    }
+    sessionStorage.setItem('rfp-buddy-active-doc', JSON.stringify(saved))
+
+    chain().limit.mockReturnValue({ ...chain(), data: [] })
+
+    const { result } = renderHook(() => useActiveDocument('token', 'user-1'))
+
+    await waitFor(() => {
+      expect(result.current.initialLoading).toBe(false)
+    })
+
+    expect(result.current.doc).toEqual({ googleDocId: 'gdoc-saved', title: 'Saved Doc' })
+    expect(result.current.content).toBe('<p>saved content</p>')
+    expect(result.current.pendingSections).toHaveLength(1)
+    expect(result.current.pendingSections[0].location).toBe('Section 1')
+  })
+
+  test('clearDocument removes sessionStorage', async () => {
+    const saved = {
+      doc: { googleDocId: 'gdoc-saved', title: 'Saved Doc' },
+      content: '<p>saved content</p>',
+      pendingSections: [],
+    }
+    sessionStorage.setItem('rfp-buddy-active-doc', JSON.stringify(saved))
+
+    chain().limit.mockReturnValue({ ...chain(), data: [] })
+
+    const { result } = renderHook(() => useActiveDocument('token', 'user-1'))
+
+    await waitFor(() => {
+      expect(result.current.initialLoading).toBe(false)
+    })
+
+    expect(result.current.doc).not.toBeNull()
+
+    act(() => {
+      result.current.clearDocument()
+    })
+
+    expect(result.current.doc).toBeNull()
+    expect(sessionStorage.getItem('rfp-buddy-active-doc')).toBeNull()
   })
 })

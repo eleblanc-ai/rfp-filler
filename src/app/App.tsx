@@ -22,6 +22,12 @@ function AppContent() {
     uploadFromComputer,
     removeRecentDocument,
     clearDocument,
+    pendingSections,
+    filling,
+    fillStatus,
+    identifySections,
+    setPendingSections,
+    cancelSections,
   } = useActiveDocument(providerToken, user?.id ?? null)
   const [page, setPage] = useState<Page>('main')
   const uploadRef = useRef<HTMLInputElement>(null)
@@ -39,7 +45,7 @@ function AppContent() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-surface">
+    <div className="flex h-screen flex-col overflow-hidden bg-surface">
       <header className="flex items-center justify-between border-b border-border px-6 py-4">
         <h1 className="text-lg font-semibold text-text-primary">RFP Buddy</h1>
         <div className="flex items-center gap-4">
@@ -74,7 +80,46 @@ function AppContent() {
           googleDocId={doc.googleDocId}
           loading={docLoading}
           error={docError}
+          filling={filling}
+          fillStatus={fillStatus}
+          pendingSections={pendingSections}
           onBack={clearDocument}
+          onAutoFill={identifySections}
+          onCancelSections={cancelSections}
+          onToggleItem={(sectionId, itemId) =>
+            setPendingSections((prev) =>
+              prev.map((s) =>
+                s.id === sectionId
+                  ? { ...s, items: s.items.map((i) => (i.id === itemId ? { ...i, selected: !i.selected } : i)) }
+                  : s,
+              ),
+            )
+          }
+          onToggleSection={(sectionId) =>
+            setPendingSections((prev) =>
+              prev.map((s) => {
+                if (s.id !== sectionId) return s
+                const allSelected = s.items.every((i) => i.selected)
+                return { ...s, items: s.items.map((i) => ({ ...i, selected: !allSelected })) }
+              }),
+            )
+          }
+          onToggleExpand={(sectionId) =>
+            setPendingSections((prev) =>
+              prev.map((s) =>
+                s.id === sectionId ? { ...s, expanded: !s.expanded } : s,
+              ),
+            )
+          }
+          onEditItemPrompt={(sectionId, itemId, prompt) =>
+            setPendingSections((prev) =>
+              prev.map((s) =>
+                s.id === sectionId
+                  ? { ...s, items: s.items.map((i) => (i.id === itemId ? { ...i, prompt } : i)) }
+                  : s,
+              ),
+            )
+          }
         />
       ) : (
         <main className="flex flex-1 flex-col items-center justify-center gap-6 px-4">
