@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { AuthProvider } from '../features/auth/auth-provider'
 import { useAuth } from '../features/auth/auth-context'
 import { LoginPage } from '../features/auth/login-page'
@@ -19,9 +19,12 @@ function AppContent() {
     initialLoading,
     recentDocuments,
     selectDocument,
+    uploadFromComputer,
+    removeRecentDocument,
     clearDocument,
   } = useActiveDocument(providerToken, user?.id ?? null)
   const [page, setPage] = useState<Page>('main')
+  const uploadRef = useRef<HTMLInputElement>(null)
 
   if (loading || initialLoading) {
     return (
@@ -68,34 +71,67 @@ function AppContent() {
         <DocumentViewer
           content={content}
           title={doc.title}
+          googleDocId={doc.googleDocId}
           loading={docLoading}
           error={docError}
           onBack={clearDocument}
         />
       ) : (
         <main className="flex flex-1 flex-col items-center justify-center gap-6 px-4">
-          <DrivePicker
-            providerToken={providerToken}
-            onSelect={(file) => selectDocument(file.id, file.name)}
-            onReconnect={signInWithGoogle}
-          />
+          <div className="flex items-center gap-3">
+            <DrivePicker
+              providerToken={providerToken}
+              onSelect={(file) => selectDocument(file.id, file.name)}
+              onReconnect={signInWithGoogle}
+            />
+            <span className="text-sm text-text-secondary">or</span>
+            <button
+              type="button"
+              onClick={() => uploadRef.current?.click()}
+              className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-text-primary shadow-sm ring-1 ring-border hover:bg-surface-secondary"
+            >
+              Upload from Computer
+            </button>
+            <input
+              ref={uploadRef}
+              type="file"
+              accept=".txt,.html,.htm,.md,.docx"
+              className="hidden"
+              data-testid="upload-input"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) {
+                  uploadFromComputer(file)
+                  e.target.value = ''
+                }
+              }}
+            />
+          </div>
           {recentDocuments.length > 0 && (
-            <div className="w-full max-w-md">
+            <div className="w-full max-w-xl">
               <h2 className="mb-3 text-sm font-medium text-text-secondary">
                 Recent documents
               </h2>
               <ul className="divide-y divide-border rounded-lg border border-border bg-white">
                 {recentDocuments.map((rd) => (
-                  <li key={rd.google_doc_id}>
+                  <li key={rd.google_doc_id} className="flex items-center">
                     <button
                       type="button"
                       onClick={() => selectDocument(rd.google_doc_id, rd.title)}
-                      className="flex w-full items-center justify-between px-4 py-3 text-left text-sm text-text-primary hover:bg-surface-secondary"
+                      className="flex min-w-0 flex-1 items-center justify-between px-4 py-3 text-left text-sm text-text-primary hover:bg-surface-secondary"
                     >
                       <span className="truncate">{rd.title}</span>
                       <span className="ml-3 shrink-0 text-xs text-text-secondary">
                         {new Date(rd.updated_at).toLocaleDateString()}
                       </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeRecentDocument(rd.google_doc_id)}
+                      className="px-3 py-3 text-sm text-text-secondary hover:text-red-600"
+                      aria-label={`Remove ${rd.title}`}
+                    >
+                      ×
                     </button>
                   </li>
                 ))}

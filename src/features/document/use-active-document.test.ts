@@ -195,4 +195,85 @@ describe('useActiveDocument', () => {
     )
     expect(result.current.doc).toEqual({ googleDocId: 'gdoc-1', title: 'Test Doc' })
   })
+
+  test('uploadFromComputer creates Drive doc and opens it', async () => {
+    chain().limit.mockReturnValue({ ...chain(), data: [] })
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ id: 'new-gdoc-id', name: 'My Upload' }),
+    })
+
+    const { result } = renderHook(() => useActiveDocument('token', 'user-1'))
+
+    await waitFor(() => {
+      expect(result.current.initialLoading).toBe(false)
+    })
+
+    const file = new File(['hello world'], 'my-upload.txt', { type: 'text/plain' })
+
+    await act(async () => {
+      await result.current.uploadFromComputer(file)
+    })
+
+    expect(result.current.doc).toEqual({ googleDocId: 'new-gdoc-id', title: 'My Upload' })
+    expect(result.current.content).toContain('hello world')
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(chain().upsert).toHaveBeenCalled()
+  })
+
+  test('uploadFromComputer shows error when no token', async () => {
+    chain().limit.mockReturnValue({ ...chain(), data: [] })
+
+    const { result } = renderHook(() => useActiveDocument(null, 'user-1'))
+
+    await waitFor(() => {
+      expect(result.current.initialLoading).toBe(false)
+    })
+
+    const file = new File(['hello'], 'test.txt', { type: 'text/plain' })
+
+    await act(async () => {
+      await result.current.uploadFromComputer(file)
+    })
+
+    expect(result.current.error).toBe(
+      'Google Drive access expired. Sign in again to upload.',
+    )
+  })
+
+  test('removeRecentDocument deletes from Supabase and refreshes list', async () => {
+    const recentDocs = [
+      { google_doc_id: 'doc-1', title: 'Doc A', updated_at: '2026-03-17T10:00:00Z' },
+      { google_doc_id: 'doc-2', title: 'Doc B', updated_at: '2026-03-16T10:00:00Z' },
+    ]
+
+    chain().limit.mockReturnValue({ ...chain(), data: recentDocs })
+
+    const { result } = renderHook(() => useActiveDocument('token', 'user-1'))
+
+    await waitFor(() => {
+      expect(result.current.initialLoading).toBe(false)
+    })
+
+    await waitFor(() => {
+      expect(result.current.recentDocuments.length).toBe(2)
+    })
+
+    // After remove, return only one doc
+    chain().limit.mockReturnValue({
+      ...chain(),
+      data: [recentDocs[1]],
+    })
+
+    await act(async () => {
+      await result.current.removeRecentDocument('doc-1')
+    })
+
+    expect(chain().delete).toHaveBeenCalled()
+    expect(chain().eq).toHaveBeenCalledWith('google_doc_id', 'doc-1')
+    expect(result.current.recentDocuments.length).toBe(1)
+    expect(result.current.recentDocuments[0].google_doc_id).toBe('doc-2')
+  })
 })

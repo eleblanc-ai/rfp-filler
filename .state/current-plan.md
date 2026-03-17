@@ -1,16 +1,18 @@
-## Slice 7: Recent Documents
+## Slice 8: Upload from Computer + View in Drive
 
-**Goal**: Keep the last 5 document entries per user in the `documents` table, prune older ones automatically, and show a recent documents list on the main page for quick reopening.
-
-**Why now**: User noticed stale entries accumulating in the `documents` table. This cleans them up and adds a quick way to reopen recently viewed RFPs.
+**Goal**: Add "Upload from Computer" for loading RFP templates as local files, auto-create a Google Doc in the user's Drive, and add a "View in Drive" link in the document viewer toolbar.
 
 **Scope**:
-- In scope: Prune old documents rows (keep last 5 per user) on each new selection, expose recent docs from useActiveDocument, render a clickable recent documents list on the main page alongside the Drive picker
-- Out of scope: AI Auto-Fill, document favoriting, search
-
-**User-visible outcome**: User can see and click on their 5 most recently opened RFP templates to quickly reload them, and old entries are automatically cleaned up.
+- Upgrade OAuth scope from drive.readonly to drive.file
+- Add uploadAndCreate(file) to use-active-document hook
+- Add "Upload from Computer" button on main page
+- Add "View in Drive" link in document viewer toolbar
+- Track google_doc_id on all documents for Drive linking
 
 **Files**:
-- `src/features/document/use-active-document.ts` (modify) — Add recentDocuments state, fetch on load, prune to 5 entries after each selectDocument
-- `src/app/App.tsx` (modify) — Render recent documents list on main page when no doc is open
-- `src/features/document/use-active-document.test.ts` (create) — Tests for recent doc loading, pruning, and selection
+- `src/features/auth/auth-provider.tsx` (modify) — Change scope to drive.file
+- `src/features/document/use-active-document.ts` (modify) — Add uploadAndCreate function
+- `src/app/App.tsx` (modify) — Add upload button on main page
+- `src/features/document/document-viewer.tsx` (modify) — Add View in Drive link
+- `src/features/document/document-viewer.test.tsx` (modify) — Test View in Drive
+- `src/features/document/use-active-document.test.ts` (modify) — Test upload flow

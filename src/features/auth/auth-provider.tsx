@@ -29,6 +29,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (newSession?.provider_token) {
             setProviderToken(newSession.provider_token)
             sessionStorage.setItem(PROVIDER_TOKEN_KEY, newSession.provider_token)
+          } else if (!newSession) {
+            setProviderToken(null)
+            sessionStorage.removeItem(PROVIDER_TOKEN_KEY)
           }
         }
         setLoading(false)
@@ -43,8 +46,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       provider: 'google',
       options: {
         redirectTo: window.location.origin,
-        queryParams: { hd: ALLOWED_DOMAIN },
-        scopes: 'https://www.googleapis.com/auth/drive.readonly',
+        queryParams: { hd: ALLOWED_DOMAIN, prompt: 'consent', access_type: 'offline' },
+        scopes: 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.file',
       },
     })
     if (error) {

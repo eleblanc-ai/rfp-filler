@@ -2,15 +2,21 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { DocumentViewer } from './document-viewer'
 
+const defaultProps = {
+  googleDocId: 'gdoc-123',
+  loading: false,
+  error: null,
+  onBack: vi.fn(),
+}
+
 describe('DocumentViewer', () => {
   test('shows loading state', () => {
     render(
       <DocumentViewer
+        {...defaultProps}
         content={null}
         title="Test Doc"
         loading={true}
-        error={null}
-        onBack={vi.fn()}
       />,
     )
     expect(screen.getByText('Loading document...')).toBeInTheDocument()
@@ -20,9 +26,9 @@ describe('DocumentViewer', () => {
     const onBack = vi.fn()
     render(
       <DocumentViewer
+        {...defaultProps}
         content={null}
         title="Test Doc"
-        loading={false}
         error="Failed to load"
         onBack={onBack}
       />,
@@ -35,11 +41,9 @@ describe('DocumentViewer', () => {
   test('renders document title and toolbar', () => {
     render(
       <DocumentViewer
+        {...defaultProps}
         content="<p>Hello world</p>"
         title="My RFP Template"
-        loading={false}
-        error={null}
-        onBack={vi.fn()}
       />,
     )
     expect(screen.getByText('My RFP Template')).toBeInTheDocument()
@@ -51,11 +55,9 @@ describe('DocumentViewer', () => {
   test('renders HTML content in the editor', () => {
     render(
       <DocumentViewer
+        {...defaultProps}
         content="<p>RFP content here</p>"
         title="Test Doc"
-        loading={false}
-        error={null}
-        onBack={vi.fn()}
       />,
     )
     expect(screen.getByText('RFP content here')).toBeInTheDocument()
@@ -65,10 +67,9 @@ describe('DocumentViewer', () => {
     const onBack = vi.fn()
     render(
       <DocumentViewer
+        {...defaultProps}
         content="<p>Content</p>"
         title="Test Doc"
-        loading={false}
-        error={null}
         onBack={onBack}
       />,
     )
@@ -79,14 +80,29 @@ describe('DocumentViewer', () => {
   test('editor area is contentEditable', () => {
     render(
       <DocumentViewer
+        {...defaultProps}
         content="<p>Editable</p>"
         title="Test Doc"
-        loading={false}
-        error={null}
-        onBack={vi.fn()}
       />,
     )
     const editor = screen.getByText('Editable').closest('[contenteditable]')
     expect(editor).toHaveAttribute('contenteditable', 'true')
+  })
+
+  test('renders View in Drive link with correct URL', () => {
+    render(
+      <DocumentViewer
+        {...defaultProps}
+        content="<p>Content</p>"
+        title="Test Doc"
+        googleDocId="abc-123"
+      />,
+    )
+    const link = screen.getByText('View in Drive')
+    expect(link).toHaveAttribute(
+      'href',
+      'https://docs.google.com/document/d/abc-123/edit',
+    )
+    expect(link).toHaveAttribute('target', '_blank')
   })
 })

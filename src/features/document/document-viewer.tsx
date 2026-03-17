@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react'
 interface DocumentViewerProps {
   content: string | null
   title: string
+  googleDocId: string
   loading: boolean
   error: string | null
   onBack: () => void
@@ -15,6 +16,7 @@ function execFormat(command: string) {
 export function DocumentViewer({
   content,
   title,
+  googleDocId,
   loading,
   error,
   onBack,
@@ -65,6 +67,14 @@ export function DocumentViewer({
           {title}
         </span>
         <div className="flex items-center gap-1">
+          <a
+            href={`https://docs.google.com/document/d/${googleDocId}/edit`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded px-2 py-1 text-sm text-primary-dark hover:bg-surface-secondary"
+          >
+            View in Drive
+          </a>
           <button
             type="button"
             onClick={() => execFormat('bold')}

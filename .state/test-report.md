@@ -88,3 +88,14 @@ Added recent documents list to main page showing up to 5 recently opened RFP tem
 | 5 | `src/features/document/use-active-document.test.ts` | selectDocument prunes old documents beyond limit of 5 | ✅ Pass | 6th document gets deleted after select |
 | 6 | `src/features/document/use-active-document.test.ts` | clearDocument resets doc, content, and error | ✅ Pass | Local state cleared on close |
 | 7 | `src/features/document/use-active-document.test.ts` | shows error when providerToken is missing | ✅ Pass | Expired token shows error message |
+
+## Slice 8: Upload from Computer + View in Drive
+
+Added local file upload that creates a Google Doc in the user's Drive and displays content in the editor. Added "View in Drive" link in the document viewer toolbar. Added ability to remove individual documents from the recent list. OAuth scopes upgraded to support both reading existing files and creating new ones.
+
+| # | File | Test name | Status | What it verifies |
+|---|------|-----------|--------|-----------------|
+| 1 | `src/features/document/use-active-document.test.ts` | uploadFromComputer creates Drive doc and opens it | ✅ Pass | Upload reads file, creates Google Doc via multipart/related, sets doc + content state |
+| 2 | `src/features/document/use-active-document.test.ts` | uploadFromComputer shows error when no token | ✅ Pass | Missing providerToken shows expired-token error |
+| 3 | `src/features/document/use-active-document.test.ts` | removeRecentDocument deletes from Supabase and refreshes list | ✅ Pass | Calls Supabase delete with correct google_doc_id, refreshes recent list |
+| 4 | `src/features/document/document-viewer.test.tsx` | renders View in Drive link | ✅ Pass | "View in Drive" link present with correct href |
