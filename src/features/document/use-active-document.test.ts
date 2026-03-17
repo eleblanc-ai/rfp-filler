@@ -390,7 +390,7 @@ describe('useActiveDocument', () => {
     expect(result.current.pendingSections).toHaveLength(0)
   })
 
-  test('restores doc, content, and pendingSections from sessionStorage', async () => {
+  test('restores doc, content, pendingSections, and fillResults from sessionStorage', async () => {
     const saved = {
       doc: { googleDocId: 'gdoc-saved', title: 'Saved Doc' },
       content: '<p>saved content</p>',
@@ -399,8 +399,11 @@ describe('useActiveDocument', () => {
           id: 's1',
           location: 'Section 1',
           expanded: false,
-          items: [{ id: 's1-1', label: 'Item', prompt: 'Do it', selected: true }],
+          items: [{ id: 's1-1', label: 'Item', prompt: 'Do it', originalText: '[Item]', selected: true }],
         },
+      ],
+      fillResults: [
+        { id: 's1-1', response: 'ThinkCERCA', originalText: 'Company Name' },
       ],
     }
     sessionStorage.setItem('rfp-buddy-active-doc', JSON.stringify(saved))
@@ -417,6 +420,8 @@ describe('useActiveDocument', () => {
     expect(result.current.content).toBe('<p>saved content</p>')
     expect(result.current.pendingSections).toHaveLength(1)
     expect(result.current.pendingSections[0].location).toBe('Section 1')
+    expect(result.current.fillResults).toHaveLength(1)
+    expect(result.current.fillResults[0]).toEqual({ id: 's1-1', response: 'ThinkCERCA', originalText: 'Company Name' })
   })
 
   test('clearDocument removes sessionStorage', async () => {
@@ -443,5 +448,192 @@ describe('useActiveDocument', () => {
 
     expect(result.current.doc).toBeNull()
     expect(sessionStorage.getItem('rfp-buddy-active-doc')).toBeNull()
+  })
+
+  test('fillSections calls auto-fill-generate with all items and returns results', async () => {
+    chain().limit.mockReturnValue({ ...chain(), data: [] })
+
+    // First: identifySections to populate pendingSections
+    mockInvoke.mockResolvedValueOnce({
+      data: {
+        sections: [
+          {
+            id: 's1',
+            location: 'Cover Page',
+            items: [
+              { id: 's1-1', label: 'Company Name', prompt: 'Provide company name' },
+              { id: 's1-2', label: 'Date', prompt: 'Provide date' },
+            ],
+          },
+        ],
+      },
+      error: null,
+    })
+
+    // Batch generate call returns all results at once
+    mockInvoke.mockResolvedValueOnce({
+      data: {
+        results: [
+          { id: 's1-1', response: 'ThinkCERCA' },
+          { id: 's1-2', response: 'March 2026' },
+        ],
+      },
+      error: null,
+    })
+
+    const { result } = renderHook(() => useActiveDocument('token', 'user-1'))
+
+    await waitFor(() => {
+      expect(result.current.initialLoading).toBe(false)
+    })
+
+    // Open a document
+    await act(async () => {
+      await result.current.selectDocument('gdoc-1', 'Test RFP')
+    })
+
+    // Identify sections
+    await act(async () => {
+      await result.current.identifySections()
+    })
+
+    expect(result.current.pendingSections).toHaveLength(1)
+
+    // Fill sections
+    await act(async () => {
+      await result.current.fillSections()
+    })
+
+    // Panel should be closed (pendingSections cleared)
+    expect(result.current.pendingSections).toHaveLength(0)
+    // Results should be populated
+    expect(result.current.fillResults).toHaveLength(2)
+    expect(result.current.fillResults[0]).toEqual({ id: 's1-1', response: 'ThinkCERCA', originalText: 'Company Name' })
+    expect(result.current.fillResults[1]).toEqual({ id: 's1-2', response: 'March 2026', originalText: 'Date' })
+    expect(result.current.filling).toBe(false)
+    // Should have called auto-fill-generate once with all items
+    expect(mockInvoke).toHaveBeenCalledWith('auto-fill-generate', {
+      body: {
+        items: [
+          { id: 's1-1', label: 'Company Name', prompt: 'Provide company name' },
+          { id: 's1-2', label: 'Date', prompt: 'Provide date' },
+        ],
+      },
+    })
+  })
+
+  test('fillSections shows error when no items selected', async () => {
+    chain().limit.mockReturnValue({ ...chain(), data: [] })
+
+    // identifySections returns sections
+    mockInvoke.mockResolvedValueOnce({
+      data: {
+        sections: [
+          {
+            id: 's1',
+            location: 'Cover Page',
+            items: [
+              { id: 's1-1', label: 'Company Name', prompt: 'Provide company name' },
+            ],
+          },
+        ],
+      },
+      error: null,
+    })
+
+    const { result } = renderHook(() => useActiveDocument('token', 'user-1'))
+
+    await waitFor(() => {
+      expect(result.current.initialLoading).toBe(false)
+    })
+
+    await act(async () => {
+      await result.current.selectDocument('gdoc-1', 'Test RFP')
+    })
+
+    await act(async () => {
+      await result.current.identifySections()
+    })
+
+    // Deselect all items via setPendingSections
+    act(() => {
+      result.current.setPendingSections((prev) =>
+        prev.map((s) => ({
+          ...s,
+          items: s.items.map((i) => ({ ...i, selected: false })),
+        })),
+      )
+    })
+
+    await act(async () => {
+      await result.current.fillSections()
+    })
+
+    expect(result.current.error).toBe('No items selected to fill.')
+    // Panel should still be open since we didn't proceed
+    expect(result.current.pendingSections).toHaveLength(1)
+  })
+
+  test('regenerate re-runs generation with last fill items', async () => {
+    chain().limit.mockReturnValue({ ...chain(), data: [] })
+
+    // identifySections
+    mockInvoke.mockResolvedValueOnce({
+      data: {
+        sections: [
+          {
+            id: 's1',
+            location: 'Cover Page',
+            items: [
+              { id: 's1-1', label: 'Company Name', prompt: 'Provide company name' },
+            ],
+          },
+        ],
+      },
+      error: null,
+    })
+
+    // First generate call
+    mockInvoke.mockResolvedValueOnce({
+      data: { results: [{ id: 's1-1', response: 'ThinkCERCA' }] },
+      error: null,
+    })
+
+    // Regenerate call
+    mockInvoke.mockResolvedValueOnce({
+      data: { results: [{ id: 's1-1', response: 'ThinkCERCA Inc.' }] },
+      error: null,
+    })
+
+    const { result } = renderHook(() => useActiveDocument('token', 'user-1'))
+
+    await waitFor(() => {
+      expect(result.current.initialLoading).toBe(false)
+    })
+
+    await act(async () => {
+      await result.current.selectDocument('gdoc-1', 'Test RFP')
+    })
+
+    await act(async () => {
+      await result.current.identifySections()
+    })
+
+    await act(async () => {
+      await result.current.fillSections()
+    })
+
+    expect(result.current.canRegenerate).toBe(true)
+    expect(result.current.fillResults[0].response).toBe('ThinkCERCA')
+
+    const versionBefore = result.current.contentVersion
+
+    await act(async () => {
+      await result.current.regenerate()
+    })
+
+    expect(result.current.contentVersion).toBe(versionBefore + 1)
+    expect(result.current.fillResults[0].response).toBe('ThinkCERCA Inc.')
+    expect(result.current.canRegenerate).toBe(true)
   })
 })

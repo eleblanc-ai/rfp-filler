@@ -25,9 +25,15 @@ function AppContent() {
     pendingSections,
     filling,
     fillStatus,
+    fillResults,
+    contentVersion,
     identifySections,
     setPendingSections,
     cancelSections,
+    fillSections,
+    regenerate,
+    updateContent,
+    canRegenerate,
   } = useActiveDocument(providerToken, user?.id ?? null)
   const [page, setPage] = useState<Page>('main')
   const uploadRef = useRef<HTMLInputElement>(null)
@@ -76,6 +82,7 @@ function AppContent() {
       ) : doc ? (
         <DocumentViewer
           content={content}
+          contentVersion={contentVersion}
           title={doc.title}
           googleDocId={doc.googleDocId}
           loading={docLoading}
@@ -83,8 +90,13 @@ function AppContent() {
           filling={filling}
           fillStatus={fillStatus}
           pendingSections={pendingSections}
+          fillResults={fillResults}
+          canRegenerate={canRegenerate}
           onBack={clearDocument}
           onAutoFill={identifySections}
+          onFillSelected={fillSections}
+          onRegenerate={regenerate}
+          onContentChange={updateContent}
           onCancelSections={cancelSections}
           onToggleItem={(sectionId, itemId) =>
             setPendingSections((prev) =>

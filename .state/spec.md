@@ -25,7 +25,9 @@ A small team of employees at ThinkCERCA (education technology company) who regul
 
 **Knowledge Base (RAG)** — In-app knowledge base management page accessible from the header. Users upload reference documents (past proposals, product specs, company info) from their computer or pick files from Google Drive. Documents are chunked, embedded via OpenAI embeddings, and stored in Supabase pgvector for retrieval. Users can view, search, and delete KB documents at any time.
 
-**AI Auto-Fill** — Claude reads the RFP template, identifies bracketed placeholder fields (e.g., `[Insert resource]`, `[Organization Name]`), and auto-fills them using relevant KB chunks retrieved via vector similarity search.
+**AI Auto-Fill** — Claude reads the RFP template, identifies sections needing responses (grouped into major categories), and presents them in an accordion review panel. User approves the selected items, clicks Fill Selected, and Claude generates responses using relevant KB chunks retrieved via vector similarity search. Responses stream directly into the document editor in real time. AI-generated content is wrapped in marked spans (data attributes) to support future track changes functionality.
+
+**Track Changes** — AI-generated content inserted during auto-fill is visually distinguished from original document content (e.g., highlighted background). Users can accept or reject individual changes inline. Provides an "Accept All" / "Reject All" option. Track changes state persists with the document so users can review changes across sessions.
 
 **Chat-Based Refinement** — After auto-fill, users can chat with Claude to refine specific sections (e.g., "make the cover letter more formal", "add more detail to Tier 3 support"). Changes are applied directly to the document in the editor.
 

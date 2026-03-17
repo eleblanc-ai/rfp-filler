@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { PendingSection } from './use-active-document'
+import type { FillResult, PendingSection } from './use-active-document'
 
 interface DocumentViewerProps {
   content: string | null
+  contentVersion: number
   title: string
   googleDocId: string
   loading: boolean
@@ -10,8 +11,13 @@ interface DocumentViewerProps {
   filling: boolean
   fillStatus: string | null
   pendingSections: PendingSection[]
+  fillResults: FillResult[]
+  canRegenerate: boolean
   onBack: () => void
   onAutoFill: () => void
+  onFillSelected: () => void
+  onRegenerate: () => void
+  onContentChange: (html: string) => void
   onCancelSections: () => void
   onToggleItem: (sectionId: string, itemId: string) => void
   onToggleSection: (sectionId: string) => void
@@ -28,6 +34,7 @@ const MAX_PANEL_RATIO = 0.7
 
 export function DocumentViewer({
   content,
+  contentVersion,
   title,
   googleDocId,
   loading,
@@ -35,8 +42,13 @@ export function DocumentViewer({
   filling,
   fillStatus,
   pendingSections,
+  fillResults,
+  canRegenerate,
   onBack,
   onAutoFill,
+  onFillSelected,
+  onRegenerate,
+  onContentChange,
   onCancelSections,
   onToggleItem,
   onToggleSection,
@@ -47,12 +59,14 @@ export function DocumentViewer({
   const containerRef = useRef<HTMLDivElement>(null)
   const [panelWidth, setPanelWidth] = useState<number | null>(null)
   const dragging = useRef(false)
+  const insertedResultIds = useRef(new Set<string>())
 
   useEffect(() => {
     if (editorRef.current && content) {
       editorRef.current.innerHTML = content
+      insertedResultIds.current.clear()
     }
-  }, [content])
+  }, [content, contentVersion])
 
   // Set initial panel width to 50% when sections first appear
   useEffect(() => {
@@ -63,6 +77,85 @@ export function DocumentViewer({
       setPanelWidth(null)
     }
   }, [pendingSections.length, panelWidth])
+
+  // Insert fill results into editor as highlighted AI-generated spans.
+  // Google Docs HTML splits text across many <span> elements, so we must
+  // search the combined textContent and map the match back to DOM nodes.
+  useEffect(() => {
+    if (!editorRef.current || fillResults.length === 0) return
+
+    for (const result of fillResults) {
+      if (insertedResultIds.current.has(result.id)) continue
+
+      const span = document.createElement('span')
+      span.setAttribute('data-ai-fill', result.id)
+      span.style.backgroundColor = '#dbeafe'
+      span.textContent = result.response
+
+      const editor = editorRef.current
+
+      // Collect all text nodes and build a combined string with offset mapping
+      const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT)
+      const nodes: { node: Text; start: number }[] = []
+      let combined = ''
+      while (walker.nextNode()) {
+        const node = walker.currentNode as Text
+        nodes.push({ node, start: combined.length })
+        combined += node.textContent ?? ''
+      }
+
+      const searchText = result.originalText
+      const matchIdx = combined.indexOf(searchText)
+      let inserted = false
+
+      if (matchIdx !== -1) {
+        const matchEnd = matchIdx + searchText.length
+
+        // Find starting text node / offset
+        let startNode: Text | null = null
+        let startOffset = 0
+        let endNode: Text | null = null
+        let endOffset = 0
+
+        for (let i = 0; i < nodes.length; i++) {
+          const { node, start } = nodes[i]
+          const nodeEnd = start + (node.textContent?.length ?? 0)
+
+          if (!startNode && nodeEnd > matchIdx) {
+            startNode = node
+            startOffset = matchIdx - start
+          }
+          if (nodeEnd >= matchEnd) {
+            endNode = node
+            endOffset = matchEnd - start
+            break
+          }
+        }
+
+        if (startNode && endNode) {
+          const range = document.createRange()
+          range.setStart(startNode, startOffset)
+          range.setEnd(endNode, endOffset)
+          range.deleteContents()
+          range.insertNode(span)
+          inserted = true
+        }
+      }
+
+      if (!inserted) {
+        const p = document.createElement('p')
+        p.appendChild(span)
+        editor.appendChild(p)
+      }
+
+      insertedResultIds.current.add(result.id)
+    }
+
+    // Bake filled content into state so it persists across refresh
+    if (editorRef.current) {
+      onContentChange(editorRef.current.innerHTML)
+    }
+  }, [fillResults]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const onMouseDown = useCallback(() => {
     dragging.current = true
@@ -133,8 +226,18 @@ export function DocumentViewer({
             disabled={filling}
             className="rounded bg-primary-dark px-3 py-1 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
           >
-            {filling ? (fillStatus ?? 'Working...') : 'Auto-Fill'}
+            {filling ? (pendingSections.length === 0 ? 'Working...' : (fillStatus ?? 'Working...')) : 'Auto-Fill'}
           </button>
+          {canRegenerate && (
+            <button
+              type="button"
+              onClick={onRegenerate}
+              disabled={filling}
+              className="rounded bg-white px-3 py-1 text-sm font-medium text-primary-dark ring-1 ring-border hover:bg-surface-secondary disabled:opacity-50"
+            >
+              Regenerate
+            </button>
+          )}
           <a
             href={`https://docs.google.com/document/d/${googleDocId}/edit`}
             target="_blank"
@@ -176,7 +279,35 @@ export function DocumentViewer({
         </div>
       )}
 
-      <div ref={containerRef} className="flex min-h-0 flex-1 overflow-hidden">
+      <div ref={containerRef} className="relative flex min-h-0 flex-1 overflow-hidden">
+        {filling && pendingSections.length === 0 && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm">
+            <div
+              className="mb-4 text-4xl"
+              style={{ animation: 'generating-pencil 0.6s ease-in-out infinite' }}
+            >
+              &#9998;
+            </div>
+            <p className="mb-3 text-sm font-medium text-text-primary">
+              {fillStatus ?? 'Working...'}
+            </p>
+            <div className="flex gap-1.5">
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  className="h-2 w-2 rounded-full bg-primary-dark"
+                  style={{
+                    animation: 'generating-bounce 1.4s ease-in-out infinite',
+                    animationDelay: `${i * 0.16}s`,
+                  }}
+                />
+              ))}
+            </div>
+            <p className="mt-4 text-xs text-text-secondary">
+              Drafting your responses — hang tight!
+            </p>
+          </div>
+        )}
         <div
           ref={editorRef}
           contentEditable
@@ -206,9 +337,9 @@ export function DocumentViewer({
               <div className="flex gap-2 border-b border-border px-4 py-3">
                 <button
                   type="button"
-                  disabled
-                  className="flex-1 rounded bg-primary-dark px-3 py-2 text-sm font-medium text-white opacity-50"
-                  title="Coming in next update"
+                  onClick={onFillSelected}
+                  disabled={pendingSections.every((s) => s.items.every((i) => !i.selected))}
+                  className="flex-1 rounded bg-primary-dark px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                 >
                   Fill Selected
                 </button>

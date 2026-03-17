@@ -86,6 +86,7 @@ For each top-level section, provide:
   - id: A unique identifier (e.g., "s1-1", "s1-2")
   - label: A short description of what needs to be filled (e.g., "Company Name", "Project timeline")
   - prompt: A clear prompt for an AI to answer this item about an education technology company
+  - originalText: The EXACT text from the document that should be replaced, including brackets if present (e.g., "[Company Name]", "[Insert response here]", "[District / Organization Name]"). This must match the document text exactly so it can be found and replaced.
 
 Return your response as a JSON object with this exact structure:
 {
@@ -94,8 +95,8 @@ Return your response as a JSON object with this exact structure:
       "id": "section-1",
       "location": "Cover Page",
       "items": [
-        { "id": "s1-1", "label": "Company Name", "prompt": "Provide the full legal company name" },
-        { "id": "s1-2", "label": "Date", "prompt": "Provide today's date" }
+        { "id": "s1-1", "label": "Company Name", "prompt": "Provide the full legal company name", "originalText": "[Company Name]" },
+        { "id": "s1-2", "label": "Date", "prompt": "Provide today's date", "originalText": "[Date]" }
       ]
     }
   ]

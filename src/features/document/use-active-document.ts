@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../shared/config/supabase'
 
 const MAX_RECENT = 5
@@ -8,12 +8,27 @@ interface SessionState {
   doc: SelectedDoc
   content: string
   pendingSections: PendingSection[]
+  fillResults: FillResult[]
+  lastFillItems: FillItem[]
 }
 
-function saveSession(doc: SelectedDoc | null, content: string | null, sections: PendingSection[]) {
+interface FillItem {
+  id: string
+  label: string
+  prompt: string
+  originalText: string
+}
+
+function saveSession(
+  doc: SelectedDoc | null,
+  content: string | null,
+  sections: PendingSection[],
+  results: FillResult[],
+  lastFillItems: FillItem[],
+) {
   try {
     if (doc && content) {
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify({ doc, content, pendingSections: sections }))
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify({ doc, content, pendingSections: sections, fillResults: results, lastFillItems }))
     } else {
       sessionStorage.removeItem(SESSION_KEY)
     }
@@ -27,7 +42,15 @@ function loadSession(): SessionState | null {
     const raw = sessionStorage.getItem(SESSION_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw)
-    if (parsed?.doc?.googleDocId && parsed?.content) return parsed as SessionState
+    if (parsed?.doc?.googleDocId && parsed?.content) {
+      return {
+        doc: parsed.doc,
+        content: parsed.content,
+        pendingSections: parsed.pendingSections ?? [],
+        fillResults: parsed.fillResults ?? [],
+        lastFillItems: parsed.lastFillItems ?? [],
+      }
+    }
   } catch {
     // best-effort
   }
@@ -49,7 +72,14 @@ export interface PendingItem {
   id: string
   label: string
   prompt: string
+  originalText: string
   selected: boolean
+}
+
+export interface FillResult {
+  id: string
+  response: string
+  originalText: string
 }
 
 export interface PendingSection {
@@ -72,11 +102,15 @@ export function useActiveDocument(
   const [pendingSections, setPendingSections] = useState<PendingSection[]>(() => loadSession()?.pendingSections ?? [])
   const [filling, setFilling] = useState(false)
   const [fillStatus, setFillStatus] = useState<string | null>(null)
+  const [fillResults, setFillResults] = useState<FillResult[]>(() => loadSession()?.fillResults ?? [])
+  const [lastFillItems, setLastFillItems] = useState<FillItem[]>(() => loadSession()?.lastFillItems ?? [])
+  const [contentVersion, setContentVersion] = useState(0)
+  const fillingRef = useRef(false)
 
-  // Persist doc, content, and pendingSections to sessionStorage
+  // Persist doc, content, pendingSections, fillResults, and lastFillItems to sessionStorage
   useEffect(() => {
-    saveSession(doc, content, pendingSections)
-  }, [doc, content, pendingSections])
+    saveSession(doc, content, pendingSections, fillResults, lastFillItems)
+  }, [doc, content, pendingSections, fillResults, lastFillItems])
   async function loadRecent() {
     if (!userId) return
     try {
@@ -271,6 +305,7 @@ export function useActiveDocument(
     setPendingSections([])
     setFilling(false)
     setFillStatus(null)
+    setFillResults([])
   }
 
   async function identifySections() {
@@ -294,12 +329,13 @@ export function useActiveDocument(
       }
 
       const sections: PendingSection[] = (data.sections ?? []).map(
-        (s: { id: string; location: string; items: { id: string; label: string; prompt: string }[] }) => ({
+        (s: { id: string; location: string; items: { id: string; label: string; prompt: string; originalText?: string }[] }) => ({
           id: s.id,
           location: s.location,
           expanded: false,
           items: (s.items ?? []).map((item) => ({
             ...item,
+            originalText: item.originalText ?? item.label,
             selected: true,
           })),
         }),
@@ -324,9 +360,94 @@ export function useActiveDocument(
     setPendingSections([])
   }
 
+  async function runGenerate(items: FillItem[]) {
+    fillingRef.current = true
+    setFilling(true)
+    setFillResults([])
+    setFillStatus(`Generating ${items.length} responses...`)
+    setError(null)
+
+    const originalTextMap = new Map<string, string>()
+    for (const item of items) {
+      originalTextMap.set(item.id, item.originalText)
+    }
+
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke(
+        'auto-fill-generate',
+        {
+          body: {
+            items: items.map((i) => ({
+              id: i.id,
+              label: i.label,
+              prompt: i.prompt,
+            })),
+          },
+        },
+      )
+
+      if (fnError) {
+        setError(`Fill failed: ${fnError.message}`)
+      } else {
+        const results: FillResult[] = (data.results ?? []).map(
+          (r: { id: string; response: string }) => ({
+            id: r.id,
+            response: r.response,
+            originalText: originalTextMap.get(r.id) ?? r.id,
+          }),
+        )
+        setFillResults(results)
+      }
+    } catch (err) {
+      setError(`Fill failed: ${err instanceof Error ? err.message : 'Unknown error'}`)
+    }
+
+    setFilling(false)
+    setFillStatus(null)
+    fillingRef.current = false
+  }
+
+  async function fillSections() {
+    if (fillingRef.current) return // prevent concurrent fills
+    const selectedItems = pendingSections
+      .flatMap((s) => s.items)
+      .filter((i) => i.selected)
+
+    if (selectedItems.length === 0) {
+      setError('No items selected to fill.')
+      return
+    }
+
+    const items: FillItem[] = selectedItems.map((i) => ({
+      id: i.id,
+      label: i.label,
+      prompt: i.prompt,
+      originalText: i.originalText,
+    }))
+
+    setPendingSections([])
+    setLastFillItems(items)
+    await runGenerate(items)
+  }
+
+  async function regenerate() {
+    if (fillingRef.current || lastFillItems.length === 0) return
+    // Bump contentVersion so the viewer resets innerHTML to original content,
+    // restoring placeholders that were replaced by previous fill results.
+    setContentVersion((v) => v + 1)
+    setFillResults([])
+    await runGenerate(lastFillItems)
+  }
+
+  function updateContent(html: string) {
+    setContent(html)
+    setFillResults([])
+  }
+
   return {
     doc,
     content,
+    contentVersion,
     loading,
     error,
     initialLoading,
@@ -334,6 +455,7 @@ export function useActiveDocument(
     pendingSections,
     filling,
     fillStatus,
+    fillResults,
     selectDocument,
     uploadFromComputer,
     removeRecentDocument,
@@ -341,5 +463,9 @@ export function useActiveDocument(
     identifySections,
     setPendingSections,
     cancelSections,
+    fillSections,
+    regenerate,
+    updateContent,
+    canRegenerate: lastFillItems.length > 0 && !filling,
   }
 }

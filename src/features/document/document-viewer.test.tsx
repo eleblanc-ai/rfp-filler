@@ -2,17 +2,23 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { DocumentViewer } from './document-viewer'
 
-import type { PendingSection } from './use-active-document'
+import type { FillResult, PendingSection } from './use-active-document'
 
 const defaultProps = {
   googleDocId: 'gdoc-123',
+  contentVersion: 0,
   loading: false,
   error: null,
   filling: false,
   fillStatus: null,
   pendingSections: [] as PendingSection[],
+  fillResults: [] as FillResult[],
+  canRegenerate: false,
   onBack: vi.fn(),
   onAutoFill: vi.fn(),
+  onFillSelected: vi.fn(),
+  onRegenerate: vi.fn(),
+  onContentChange: vi.fn(),
   onCancelSections: vi.fn(),
   onToggleItem: vi.fn(),
   onToggleSection: vi.fn(),
@@ -146,7 +152,7 @@ describe('DocumentViewer', () => {
     expect(onAutoFill).toHaveBeenCalled()
   })
 
-  test('Auto-Fill button shows status text when filling', () => {
+  test('Auto-Fill button shows Working... when filling', () => {
     render(
       <DocumentViewer
         {...defaultProps}
@@ -156,7 +162,22 @@ describe('DocumentViewer', () => {
         fillStatus="Analyzing document..."
       />,
     )
-    expect(screen.getByText('Analyzing document...')).toBeInTheDocument()
+    expect(screen.getByText('Working...')).toBeInTheDocument()
+  })
+
+  test('shows generating overlay when filling with no pending sections', () => {
+    render(
+      <DocumentViewer
+        {...defaultProps}
+        content="<p>Content</p>"
+        title="Test Doc"
+        filling={true}
+        fillStatus="Generating 5 responses..."
+        pendingSections={[]}
+      />,
+    )
+    expect(screen.getByText('Generating 5 responses...')).toBeInTheDocument()
+    expect(screen.getByText('Drafting your responses — hang tight!')).toBeInTheDocument()
   })
 
   test('shows section review panel when pendingSections exist', () => {
@@ -166,8 +187,8 @@ describe('DocumentViewer', () => {
         location: 'Section 1: Overview',
         expanded: true,
         items: [
-          { id: 's1-1', label: 'Company Name', prompt: 'Provide company name', selected: true },
-          { id: 's1-2', label: 'Date', prompt: 'Provide date', selected: true },
+          { id: 's1-1', label: 'Company Name', prompt: 'Provide company name', originalText: '[Company Name]', selected: true },
+          { id: 's1-2', label: 'Date', prompt: 'Provide date', originalText: '[Date]', selected: true },
         ],
       },
       {
@@ -175,7 +196,7 @@ describe('DocumentViewer', () => {
         location: 'Section 2: Approach',
         expanded: true,
         items: [
-          { id: 's2-1', label: 'Methodology', prompt: 'Describe approach', selected: true },
+          { id: 's2-1', label: 'Methodology', prompt: 'Describe approach', originalText: '[Methodology]', selected: true },
         ],
       },
     ]
@@ -204,7 +225,7 @@ describe('DocumentViewer', () => {
         location: 'Section 1',
         expanded: true,
         items: [
-          { id: 's1-1', label: 'Company Name', prompt: 'Describe company', selected: true },
+          { id: 's1-1', label: 'Company Name', prompt: 'Describe company', originalText: '[Company Name]', selected: true },
         ],
       },
     ]
@@ -231,7 +252,7 @@ describe('DocumentViewer', () => {
         location: 'Section 1',
         expanded: true,
         items: [
-          { id: 's1-1', label: 'Company Name', prompt: 'Describe company', selected: true },
+          { id: 's1-1', label: 'Company Name', prompt: 'Describe company', originalText: '[Company Name]', selected: true },
         ],
       },
     ]
@@ -257,7 +278,7 @@ describe('DocumentViewer', () => {
         location: 'Section 1',
         expanded: true,
         items: [
-          { id: 's1-1', label: 'Company Name', prompt: 'Describe company', selected: true },
+          { id: 's1-1', label: 'Company Name', prompt: 'Describe company', originalText: '[Company Name]', selected: true },
         ],
       },
     ]
@@ -281,7 +302,7 @@ describe('DocumentViewer', () => {
         location: 'Section 1',
         expanded: false,
         items: [
-          { id: 's1-1', label: 'Hidden Item', prompt: 'Describe company', selected: true },
+          { id: 's1-1', label: 'Hidden Item', prompt: 'Describe company', originalText: '[Hidden Item]', selected: true },
         ],
       },
     ]
@@ -305,7 +326,7 @@ describe('DocumentViewer', () => {
         location: 'Section 1',
         expanded: true,
         items: [
-          { id: 's1-1', label: 'Company Name', prompt: 'Describe', selected: true },
+          { id: 's1-1', label: 'Company Name', prompt: 'Describe', originalText: '[Company Name]', selected: true },
         ],
       },
     ]
@@ -334,5 +355,116 @@ describe('DocumentViewer', () => {
     expect(screen.getByText('No fillable sections found in this document.')).toBeInTheDocument()
     // Should NOT show the full-page error since content exists
     expect(screen.queryByText('Back to file picker')).not.toBeInTheDocument()
+  })
+
+  test('Fill Selected button calls onFillSelected', async () => {
+    const onFillSelected = vi.fn()
+    const sections: PendingSection[] = [
+      {
+        id: 's1',
+        location: 'Section 1',
+        expanded: true,
+        items: [
+          { id: 's1-1', label: 'Company Name', prompt: 'Describe company', originalText: '[Company Name]', selected: true },
+        ],
+      },
+    ]
+    render(
+      <DocumentViewer
+        {...defaultProps}
+        content="<p>Content</p>"
+        title="Test Doc"
+        pendingSections={sections}
+        onFillSelected={onFillSelected}
+      />,
+    )
+    await userEvent.click(screen.getByText('Fill Selected'))
+    expect(onFillSelected).toHaveBeenCalled()
+  })
+
+  test('Fill Selected button is disabled when no items selected', () => {
+    const sections: PendingSection[] = [
+      {
+        id: 's1',
+        location: 'Section 1',
+        expanded: true,
+        items: [
+          { id: 's1-1', label: 'Company Name', prompt: 'Describe company', originalText: '[Company Name]', selected: false },
+        ],
+      },
+    ]
+    render(
+      <DocumentViewer
+        {...defaultProps}
+        content="<p>Content</p>"
+        title="Test Doc"
+        pendingSections={sections}
+      />,
+    )
+    expect(screen.getByText('Fill Selected')).toBeDisabled()
+  })
+
+  test('inserts fill results into editor and calls onContentChange to persist', () => {
+    const onContentChange = vi.fn()
+    const fillResults: FillResult[] = [
+      { id: 'item-1', response: 'ThinkCERCA Inc.', originalText: '[Company Name]' },
+    ]
+    render(
+      <DocumentViewer
+        {...defaultProps}
+        content="<p>Company: [Company Name]</p>"
+        title="Test Doc"
+        fillResults={fillResults}
+        onContentChange={onContentChange}
+      />,
+    )
+    const span = document.querySelector('[data-ai-fill="item-1"]')
+    expect(span).not.toBeNull()
+    expect(span?.textContent).toBe('ThinkCERCA Inc.')
+    expect(onContentChange).toHaveBeenCalledTimes(1)
+    expect(onContentChange.mock.calls[0][0]).toContain('ThinkCERCA Inc.')
+  })
+
+  test('shows Regenerate button when canRegenerate is true', async () => {
+    const onRegenerate = vi.fn()
+    render(
+      <DocumentViewer
+        {...defaultProps}
+        content="<p>Content</p>"
+        title="Test Doc"
+        canRegenerate={true}
+        onRegenerate={onRegenerate}
+      />,
+    )
+    const btn = screen.getByText('Regenerate')
+    expect(btn).toBeInTheDocument()
+    await userEvent.click(btn)
+    expect(onRegenerate).toHaveBeenCalled()
+  })
+
+  test('hides Regenerate button when canRegenerate is false', () => {
+    render(
+      <DocumentViewer
+        {...defaultProps}
+        content="<p>Content</p>"
+        title="Test Doc"
+        canRegenerate={false}
+      />,
+    )
+    expect(screen.queryByText('Regenerate')).not.toBeInTheDocument()
+  })
+
+  test('Regenerate button is disabled while filling', () => {
+    render(
+      <DocumentViewer
+        {...defaultProps}
+        content="<p>Content</p>"
+        title="Test Doc"
+        canRegenerate={true}
+        filling={true}
+        fillStatus="Generating 5 responses..."
+      />,
+    )
+    expect(screen.getByText('Regenerate')).toBeDisabled()
   })
 })

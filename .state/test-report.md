@@ -121,3 +121,16 @@ Added the first half of the AI auto-fill flow. A new Edge Function sends documen
 | 13 | `src/features/document/use-active-document.test.ts` | cancelSections clears pendingSections | ✅ Pass | Sections cleared |
 | 14 | `src/features/document/use-active-document.test.ts` | restores doc, content, and pendingSections from sessionStorage | ✅ Pass | State restored on mount |
 | 15 | `src/features/document/use-active-document.test.ts` | clearDocument removes sessionStorage | ✅ Pass | Storage cleared on doc close |
+
+## Slice 10: Auto-Fill Generate
+
+Completed the core auto-fill generation loop. Users select sections from the review panel, click Fill Selected, and Claude generates responses using RAG-retrieved KB context via a new Edge Function. Responses are inserted into the editor as highlighted spans with cross-node DOM matching. Added Regenerate button to re-run fills, and content persistence across page refresh via sessionStorage content baking.
+
+| # | File | Test name | Status | What it verifies |
+|---|------|-----------|--------|-----------------|
+| 1 | `src/features/document/document-viewer.test.tsx` | inserts fill results into editor and calls onContentChange to persist | ✅ Pass | AI spans inserted into editor, content baked to state for persistence |
+| 2 | `src/features/document/document-viewer.test.tsx` | shows Regenerate button when canRegenerate is true | ✅ Pass | Regenerate button visible after fill completes |
+| 3 | `src/features/document/document-viewer.test.tsx` | hides Regenerate button when canRegenerate is false | ✅ Pass | Regenerate button hidden before any fill |
+| 4 | `src/features/document/document-viewer.test.tsx` | Regenerate button disabled while filling | ✅ Pass | Button disabled during active generation |
+| 5 | `src/features/document/use-active-document.test.ts` | fillSections calls generate edge function and returns results | ✅ Pass | Fill flow invokes edge function, maps results with originalText |
+| 6 | `src/features/document/use-active-document.test.ts` | regenerate bumps contentVersion and re-runs generation | ✅ Pass | Regenerate resets content, re-runs fill, canRegenerate stays true |
