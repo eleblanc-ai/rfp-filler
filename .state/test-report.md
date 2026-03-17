@@ -48,3 +48,18 @@ Added document viewer that fetches Google Doc content as HTML via Drive export A
 | 4 | `src/features/document/document-viewer.test.tsx` | renders HTML content in the editor | ✅ Pass | HTML content rendered in contentEditable area |
 | 5 | `src/features/document/document-viewer.test.tsx` | calls onBack when back button is clicked | ✅ Pass | Back button triggers callback |
 | 6 | `src/features/document/document-viewer.test.tsx` | editor area is contentEditable | ✅ Pass | Editor div has contentEditable attribute |
+
+## Slice 5: Knowledge Base Page
+
+Added knowledge base management page with in-app document upload and Google Drive import. Documents stored in Supabase kb_documents table with CRUD operations via useKbDocuments hook. KB page accessible from header link.
+
+| # | File | Test name | Status | What it verifies |
+|---|------|-----------|--------|-----------------|
+| 1 | `src/features/knowledge-base/kb-page.test.tsx` | shows empty state when no KB documents | ✅ Pass | Empty KB shows helpful message |
+| 2 | `src/features/knowledge-base/kb-page.test.tsx` | upload button triggers file picker | ✅ Pass | Upload button + hidden file input present |
+| 3 | `src/features/knowledge-base/kb-page.test.tsx` | uploaded file calls addDocument | ✅ Pass | File upload reads text + calls hook |
+| 4 | `src/features/knowledge-base/kb-page.test.tsx` | shows document list with delete button | ✅ Pass | Document renders with delete action |
+| 5 | `src/features/knowledge-base/kb-page.test.tsx` | delete button removes document | ✅ Pass | Delete calls hook with correct doc ID |
+| 6 | `src/features/knowledge-base/kb-page.test.tsx` | import from Google Drive button is present | ✅ Pass | Drive import button visible |
+| 7 | `src/features/knowledge-base/kb-page.test.tsx` | back button calls onBack | ✅ Pass | Navigation back works |
+| 8 | `src/features/knowledge-base/kb-page.test.tsx` | shows source label for Drive-imported documents | ✅ Pass | Drive source shown on imported docs |

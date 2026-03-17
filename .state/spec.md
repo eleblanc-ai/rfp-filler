@@ -2,7 +2,7 @@
 **Created:** 2026-03-16 | **Status:** Draft (Phase 1 Interview)
 
 ## Overview
-RFP Filler is a web app that helps ThinkCERCA employees quickly fill out RFP (Request for Proposal) templates by pulling from a knowledge base of company documents stored in Google Drive. Users load an RFP template from Google Drive, Claude auto-fills the bracketed placeholder fields using knowledge base content, users review/edit the result in-app, and can refine sections via chat with Claude. The completed document syncs back to Google Drive.
+RFP Filler is a web app that helps ThinkCERCA employees quickly fill out RFP (Request for Proposal) templates by pulling from an in-app knowledge base of company documents. Users upload reference documents to a knowledge base, load an RFP template from Google Drive, Claude auto-fills the bracketed placeholder fields using relevant knowledge base content (retrieved via RAG), users review/edit the result in-app, and can refine sections via chat with Claude. The completed document syncs back to Google Drive.
 
 ## Goals
 - Dramatically reduce time spent manually filling out repetitive RFP templates
@@ -19,9 +19,9 @@ A small team of employees at ThinkCERCA (education technology company) who regul
 
 **Document Viewer/Editor** — Display the loaded RFP document in-app with an editable rich text view. Users can manually edit any part of the document.
 
-**Knowledge Base (Google Drive Folder)** — A designated Google Drive folder contains company reference documents (past proposals, product specs, company info). The app reads from this folder to provide context for Claude.
+**Knowledge Base (RAG)** — In-app knowledge base management page accessible from the header. Users upload reference documents (past proposals, product specs, company info) from their computer or pick files from Google Drive. Documents are chunked, embedded via OpenAI embeddings, and stored in Supabase pgvector for retrieval. Users can view, search, and delete KB documents at any time.
 
-**AI Auto-Fill** — Claude reads the RFP template, identifies bracketed placeholder fields (e.g., `[Insert resource]`, `[Organization Name]`), and auto-fills them using content retrieved from the knowledge base documents.
+**AI Auto-Fill** — Claude reads the RFP template, identifies bracketed placeholder fields (e.g., `[Insert resource]`, `[Organization Name]`), and auto-fills them using relevant KB chunks retrieved via vector similarity search.
 
 **Chat-Based Refinement** — After auto-fill, users can chat with Claude to refine specific sections (e.g., "make the cover letter more formal", "add more detail to Tier 3 support"). Changes are applied directly to the document in the editor.
 
@@ -30,9 +30,11 @@ A small team of employees at ThinkCERCA (education technology company) who regul
 ## Constraints
 - Authentication restricted to @thinkcerca.com Google Workspace accounts
 - Google Drive API required for reading/writing documents
-- Google Docs format (not PDF or Word) for initial version
-- Claude API (Anthropic) for AI features — requires API key management
-- Knowledge base documents must be in a single designated Drive folder
+- Google Docs format (not PDF or Word) for RFP templates
+- Claude API (Anthropic) for AI generation — regular API key, no project-scoping needed
+- OpenAI API for text embeddings (text-embedding-3-small)
+- Supabase pgvector extension for vector storage and similarity search
+- Knowledge base managed in-app (upload + Google Drive import)
 - Must handle Google API rate limits and token refresh gracefully
 
 ## Architecture
@@ -41,7 +43,8 @@ A small team of employees at ThinkCERCA (education technology company) who regul
 **Styling:** Tailwind CSS v4
 **Database/Storage:** Supabase (Auth for session management, Postgres for user settings and document metadata)
 **Supabase mode:** hosted
-**AI / External APIs:** Claude API (Anthropic, claude-sonnet-4-20250514 or latest), Google Drive API, Google Docs API
+**AI / External APIs:** Claude API (Anthropic, claude-sonnet-4-20250514 or latest) for generation, OpenAI API (text-embedding-3-small) for embeddings, Google Drive API, Google Docs API
+**Vector storage:** Supabase pgvector extension
 **API layer:** Supabase Edge Functions (handles Claude API calls and Google Drive operations server-side to protect API keys)
 **Verification command:** npm run verify
 **Local dev:** npm run dev
@@ -51,7 +54,6 @@ profiles:
 - id uuid (references auth.users)
 - email text (user's Google email)
 - display_name text
-- kb_folder_id text (Google Drive folder ID for knowledge base)
 - created_at timestamptz
 - updated_at timestamptz
 
@@ -70,6 +72,25 @@ chat_messages:
 - document_id uuid (references documents.id)
 - role text (user | assistant)
 - content text
+- created_at timestamptz
+
+kb_documents:
+- id uuid (primary key)
+- user_id uuid (references profiles.id)
+- filename text (original file name)
+- source text (upload | drive)
+- google_doc_id text (nullable, set if imported from Drive)
+- content_type text (text/plain, application/pdf, etc.)
+- raw_text text (extracted plain text)
+- chunk_count integer
+- created_at timestamptz
+
+kb_chunks:
+- id uuid (primary key)
+- document_id uuid (references kb_documents.id, cascade delete)
+- chunk_index integer (position within document)
+- content text (chunk text)
+- embedding vector(1536) (OpenAI text-embedding-3-small output)
 - created_at timestamptz
 
 ## UI Style
