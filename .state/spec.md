@@ -1,8 +1,8 @@
 # Product Spec
-**Created:** 2026-03-16 | **Status:** Draft (Phase 1 Interview)
+**Created:** 2026-03-16 | **Updated:** 2026-03-17 | **Status:** Approved
 
 ## Overview
-RFP Filler is a web app that helps ThinkCERCA employees quickly fill out RFP (Request for Proposal) templates by pulling from an in-app knowledge base of company documents. Users upload reference documents to a knowledge base, load an RFP template from Google Drive, Claude auto-fills the bracketed placeholder fields using relevant knowledge base content (retrieved via RAG), users review/edit the result in-app, and can refine sections via chat with Claude. The completed document syncs back to Google Drive.
+RFP Buddy is a web app that helps ThinkCERCA employees quickly fill out RFP (Request for Proposal) templates by pulling from an in-app knowledge base of company documents. Users upload reference documents to a knowledge base, load an RFP template from Google Drive or upload from their computer (which auto-creates a Google Doc), Claude auto-fills the bracketed placeholder fields using relevant knowledge base content (retrieved via RAG), users review/edit the result in-app, and can refine sections via chat with Claude. The completed document syncs back to Google Drive.
 
 ## Goals
 - Dramatically reduce time spent manually filling out repetitive RFP templates
@@ -13,11 +13,15 @@ RFP Filler is a web app that helps ThinkCERCA employees quickly fill out RFP (Re
 A small team of employees at ThinkCERCA (education technology company) who regularly respond to RFPs for digital instructional resources. Non-technical users who need a simple, intuitive workflow.
 
 ## Core Features
-**Google OAuth Login** — Sign in with Google, restricted to @thinkcerca.com domains. Grants Drive access permissions.
+**Google OAuth Login** — Sign in with Google, restricted to @thinkcerca.com domains. Grants Drive read + file creation permissions (drive.readonly + drive.file scopes).
 
 **Google Drive File Picker** — Browse and select RFP template documents (Google Docs) from Google Drive to load into the app.
 
-**Document Viewer/Editor** — Display the loaded RFP document in-app with an editable rich text view. Users can manually edit any part of the document.
+**Upload from Computer** — Upload local files (.txt, .html, .md, .docx) which auto-creates a Google Doc in the user's Drive and opens the content in the editor.
+
+**Document Viewer/Editor** — Display the loaded RFP document in-app with an editable rich text view. Users can manually edit any part of the document. Includes "View in Drive" link to open the source Google Doc.
+
+**Recent Documents** — Main page shows up to 5 recently opened documents with click-to-reopen. Users can remove individual entries. Old entries auto-pruned beyond the limit.
 
 **Knowledge Base (RAG)** — In-app knowledge base management page accessible from the header. Users upload reference documents (past proposals, product specs, company info) from their computer or pick files from Google Drive. Documents are chunked, embedded via OpenAI embeddings, and stored in Supabase pgvector for retrieval. Users can view, search, and delete KB documents at any time.
 
@@ -26,6 +30,10 @@ A small team of employees at ThinkCERCA (education technology company) who regul
 **Chat-Based Refinement** — After auto-fill, users can chat with Claude to refine specific sections (e.g., "make the cover letter more formal", "add more detail to Tier 3 support"). Changes are applied directly to the document in the editor.
 
 **Save Back to Google Drive** — Save the completed/edited document back to Google Drive (update the original or save as a new copy).
+
+**Rich Text Editor Enhancements** — Expand the editor toolbar with formatting options: bulleted/numbered lists, headings, text alignment, and other common rich text features.
+
+**Drive Picker State Persistence** — Preserve the Drive picker's open/closed state and last-fetched file list across page refreshes so users don't have to re-open the picker each time.
 
 ## Constraints
 - Authentication restricted to @thinkcerca.com Google Workspace accounts
