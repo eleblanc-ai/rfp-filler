@@ -47,7 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       options: {
         redirectTo: window.location.origin,
         queryParams: { hd: ALLOWED_DOMAIN, prompt: 'consent', access_type: 'offline' },
-        scopes: 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.file',
+        scopes: 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/documents',
       },
     })
     if (error) {

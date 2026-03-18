@@ -13,11 +13,14 @@ interface DocumentViewerProps {
   pendingSections: PendingSection[]
   fillResults: FillResult[]
   canRegenerate: boolean
+  saving: boolean
+  lastSavedAt: string | null
   onBack: () => void
   onAutoFill: () => void
   onFillSelected: () => void
   onRegenerate: () => void
   onContentChange: (html: string) => void
+  onSaveToDrive: (html: string) => void
   onCancelSections: () => void
   onToggleItem: (sectionId: string, itemId: string) => void
   onToggleSection: (sectionId: string) => void
@@ -44,11 +47,14 @@ export function DocumentViewer({
   pendingSections,
   fillResults,
   canRegenerate,
+  saving,
+  lastSavedAt,
   onBack,
   onAutoFill,
   onFillSelected,
   onRegenerate,
   onContentChange,
+  onSaveToDrive,
   onCancelSections,
   onToggleItem,
   onToggleSection,
@@ -246,6 +252,23 @@ export function DocumentViewer({
           >
             View in Drive
           </a>
+          <button
+            type="button"
+            onClick={() => {
+              if (editorRef.current) {
+                onSaveToDrive(editorRef.current.innerHTML)
+              }
+            }}
+            disabled={saving}
+            className="rounded bg-green-600 px-3 py-1 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+          >
+            {saving ? 'Saving...' : 'Save to Drive'}
+          </button>
+          {lastSavedAt && !saving && (
+            <span className="text-xs text-green-600" title={new Date(lastSavedAt).toLocaleString()}>
+              Saved
+            </span>
+          )}
           <button
             type="button"
             onClick={() => execFormat('bold')}

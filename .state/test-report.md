@@ -146,3 +146,45 @@ Added PDF upload support to the Knowledge Base using pdfjs-dist for client-side 
 | 3 | `src/features/knowledge-base/extract-pdf-text.test.ts` | returns empty string for a PDF with no text | ✅ Pass | Empty items array returns empty string |
 | 4 | `src/features/knowledge-base/kb-page.test.tsx` | PDF upload extracts text and calls addDocument with application/pdf | ✅ Pass | PDF triggers extractPdfText, passes text to addDocument with correct contentType |
 | 5 | `src/features/knowledge-base/kb-page.test.tsx` | PDF upload shows error when extracted text is empty | ✅ Pass | Scanned PDF (empty text) shows error, addDocument not called |
+
+## Slice 12: Save to Drive
+
+Replaced the broken Drive upload API approach (403 error) with Google Docs API batchUpdate for in-place document editing. Created an HTML-to-Docs conversion utility that parses editor HTML into structured paragraphs with formatting metadata, then generates delete + insert + style requests. Added the `documents` OAuth scope for write access to Google Docs. Fixed inherited font size issue by clearing explicit fontSize on inserted text and applying named paragraph styles to every paragraph.
+
+| # | File | Test name | Status | What it verifies |
+|---|------|-----------|--------|-----------------|
+| 1 | `src/features/document/html-to-docs.test.ts` | parses a simple paragraph | ✅ Pass | Single `<p>` produces one paragraph with correct text and no formatting |
+| 2 | `src/features/document/html-to-docs.test.ts` | parses multiple paragraphs | ✅ Pass | Two `<p>` elements produce two separate paragraphs |
+| 3 | `src/features/document/html-to-docs.test.ts` | detects bold via `<b>` tag | ✅ Pass | `<b>` tag sets bold flag on run |
+| 4 | `src/features/document/html-to-docs.test.ts` | detects bold via `<strong>` tag | ✅ Pass | `<strong>` tag sets bold flag |
+| 5 | `src/features/document/html-to-docs.test.ts` | detects bold via inline style font-weight:700 | ✅ Pass | Inline style font-weight detection |
+| 6 | `src/features/document/html-to-docs.test.ts` | detects italic via `<i>` tag | ✅ Pass | `<i>` tag sets italic flag |
+| 7 | `src/features/document/html-to-docs.test.ts` | detects italic via `<em>` tag | ✅ Pass | `<em>` tag sets italic flag |
+| 8 | `src/features/document/html-to-docs.test.ts` | detects italic via inline style | ✅ Pass | Inline style font-style:italic detection |
+| 9 | `src/features/document/html-to-docs.test.ts` | detects underline via `<u>` tag | ✅ Pass | `<u>` tag sets underline flag |
+| 10 | `src/features/document/html-to-docs.test.ts` | detects underline via inline style | ✅ Pass | Inline style text-decoration:underline detection |
+| 11 | `src/features/document/html-to-docs.test.ts` | parses heading levels | ✅ Pass | h1-h6 tags produce correct headingLevel values |
+| 12 | `src/features/document/html-to-docs.test.ts` | handles nested formatting (bold inside italic) | ✅ Pass | Nested tags accumulate formatting flags |
+| 13 | `src/features/document/html-to-docs.test.ts` | handles mixed formatted and plain text | ✅ Pass | Adjacent formatted/unformatted runs parsed correctly |
+| 14 | `src/features/document/html-to-docs.test.ts` | treats `<br>` as paragraph break | ✅ Pass | BR splits content into separate paragraphs |
+| 15 | `src/features/document/html-to-docs.test.ts` | handles empty HTML | ✅ Pass | Empty string produces empty array |
+| 16 | `src/features/document/html-to-docs.test.ts` | handles empty paragraph | ✅ Pass | Empty `<p>` produces paragraph with no runs |
+| 17 | `src/features/document/html-to-docs.test.ts` | handles plain text without wrapper elements | ✅ Pass | Raw text without tags parsed as single paragraph |
+| 18 | `src/features/document/html-to-docs.test.ts` | handles div elements as block containers | ✅ Pass | `<div>` treated as block element |
+| 19 | `src/features/document/html-to-docs.test.ts` | inherits bold from block element | ✅ Pass | Block-level inline style inherited by child text |
+| 20 | `src/features/document/html-to-docs.test.ts` | returns only delete request for empty paragraphs with existing content | ✅ Pass | Empty paragraphs + non-empty doc only produces delete request |
+| 21 | `src/features/document/html-to-docs.test.ts` | returns empty array for empty doc and empty paragraphs | ✅ Pass | No requests generated for empty doc + empty paragraphs |
+| 22 | `src/features/document/html-to-docs.test.ts` | generates delete, insert, clear fontSize, and NORMAL_TEXT | ✅ Pass | Full request chain: delete + insert + clear fontSize + NORMAL_TEXT paragraph style |
+| 23 | `src/features/document/html-to-docs.test.ts` | generates text style request for bold text | ✅ Pass | Bold run produces UpdateTextStyle with correct range |
+| 24 | `src/features/document/html-to-docs.test.ts` | generates combined fields for bold+italic | ✅ Pass | Multiple formatting flags combined in single request |
+| 25 | `src/features/document/html-to-docs.test.ts` | generates paragraph style request for headings | ✅ Pass | Heading paragraph gets HEADING_1 named style |
+| 26 | `src/features/document/html-to-docs.test.ts` | tracks correct offsets across multiple paragraphs | ✅ Pass | Newline between paragraphs correctly offsets second paragraph indices |
+| 27 | `src/features/document/html-to-docs.test.ts` | handles multiple runs in one paragraph | ✅ Pass | Bold run within mixed content gets correct index range |
+| 28 | `src/features/document/html-to-docs.test.ts` | no formatting style requests for unformatted text | ✅ Pass | Only fontSize-clearing request, no bold/italic/underline |
+| 29 | `src/features/document/use-active-document.test.ts` | saveToDrive calls Google Docs API and sets lastSavedAt | ✅ Pass | documents.get + batchUpdate called with correct URLs, structured request body |
+| 30 | `src/features/document/use-active-document.test.ts` | saveToDrive handles 401 auth expiry on documents.get | ✅ Pass | 401 from Docs API produces auth-expired error |
+| 31 | `src/features/document/document-viewer.test.tsx` | renders Save to Drive button in toolbar | ✅ Pass | Save button present |
+| 32 | `src/features/document/document-viewer.test.tsx` | Save to Drive button calls onSaveToDrive with editor HTML | ✅ Pass | Click sends editor innerHTML to callback |
+| 33 | `src/features/document/document-viewer.test.tsx` | Save to Drive button shows Saving... while saving | ✅ Pass | Loading state + disabled during save |
+| 34 | `src/features/document/document-viewer.test.tsx` | shows Saved indicator after successful save | ✅ Pass | Green "Saved" text with timestamp |
+| 35 | `src/features/document/document-viewer.test.tsx` | hides Saved indicator while saving | ✅ Pass | Saved hidden during active save |

@@ -33,6 +33,9 @@ function AppContent() {
     fillSections,
     regenerate,
     updateContent,
+    saveToDrive,
+    saving,
+    lastSavedAt,
     canRegenerate,
   } = useActiveDocument(providerToken, user?.id ?? null)
   const [page, setPage] = useState<Page>('main')
@@ -92,11 +95,14 @@ function AppContent() {
           pendingSections={pendingSections}
           fillResults={fillResults}
           canRegenerate={canRegenerate}
+          saving={saving}
+          lastSavedAt={lastSavedAt}
           onBack={clearDocument}
           onAutoFill={identifySections}
           onFillSelected={fillSections}
           onRegenerate={regenerate}
           onContentChange={updateContent}
+          onSaveToDrive={saveToDrive}
           onCancelSections={cancelSections}
           onToggleItem={(sectionId, itemId) =>
             setPendingSections((prev) =>

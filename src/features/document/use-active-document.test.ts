@@ -1,5 +1,5 @@
 import { renderHook, act, waitFor } from '@testing-library/react'
-import { useActiveDocument } from './use-active-document'
+import { useActiveDocument, stripAiFillMarkup } from './use-active-document'
 
 const mockInvoke = vi.hoisted(() => vi.fn())
 
@@ -10,6 +10,7 @@ const mockFrom = vi.hoisted(() => {
     order: vi.fn().mockReturnThis(),
     limit: vi.fn().mockReturnThis(),
     upsert: vi.fn().mockResolvedValue({ error: null }),
+    update: vi.fn().mockReturnThis(),
     delete: vi.fn().mockReturnThis(),
     in: vi.fn().mockResolvedValue({ error: null }),
   }
@@ -702,5 +703,198 @@ describe('useActiveDocument', () => {
     expect(result.current.contentVersion).toBe(versionBefore + 1)
     expect(result.current.fillResults[0].response).toBe('ThinkCERCA Inc.')
     expect(result.current.canRegenerate).toBe(true)
+  })
+
+  test('stripAiFillMarkup removes data-ai-fill and background-color but keeps text', () => {
+    const input = '<p>Hello <span data-ai-fill="x" style="background-color: rgb(219, 234, 254)">world</span></p>'
+    const result = stripAiFillMarkup(input)
+    expect(result).not.toContain('data-ai-fill')
+    expect(result).not.toContain('background-color')
+    expect(result).toContain('world')
+    expect(result).toContain('Hello')
+  })
+
+  test('stripAiFillMarkup passes through HTML with no AI fills', () => {
+    const input = '<p>Plain text</p>'
+    const result = stripAiFillMarkup(input)
+    expect(result).toBe('<p>Plain text</p>')
+  })
+
+  test('saveToDrive calls Google Docs API to update document and sets lastSavedAt', async () => {
+    chain().limit.mockReturnValue({ ...chain(), data: [] })
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      text: () => Promise.resolve('<body><p>content</p></body>'),
+    })
+
+    const { result } = renderHook(() => useActiveDocument('token', 'user-1'))
+
+    await waitFor(() => {
+      expect(result.current.initialLoading).toBe(false)
+    })
+
+    await act(async () => {
+      await result.current.selectDocument('gdoc-save', 'Save Doc')
+    })
+
+    // Mock documents.get response
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({
+        body: {
+          content: [
+            { startIndex: 0, endIndex: 1 },
+            { startIndex: 1, endIndex: 10 },
+          ],
+        },
+      }),
+    })
+
+    // Mock documents.batchUpdate response
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({}),
+    })
+
+    await act(async () => {
+      await result.current.saveToDrive('<p>Hello <span data-ai-fill="x" style="background-color: rgb(219, 234, 254)">world</span></p>')
+    })
+
+    // First save call should be documents.get
+    const getCall = mockFetch.mock.calls[mockFetch.mock.calls.length - 2]
+    expect(getCall[0]).toBe('https://docs.googleapis.com/v1/documents/gdoc-save')
+    expect(getCall[1].headers.Authorization).toBe('Bearer token')
+
+    // Second save call should be documents.batchUpdate
+    const updateCall = mockFetch.mock.calls[mockFetch.mock.calls.length - 1]
+    expect(updateCall[0]).toBe('https://docs.googleapis.com/v1/documents/gdoc-save:batchUpdate')
+    expect(updateCall[1].method).toBe('POST')
+    expect(updateCall[1].headers['Content-Type']).toBe('application/json')
+
+    // Verify the request body contains structured requests (not raw HTML)
+    const body = JSON.parse(updateCall[1].body)
+    expect(body.requests).toBeDefined()
+    expect(Array.isArray(body.requests)).toBe(true)
+
+    expect(result.current.lastSavedAt).not.toBeNull()
+    expect(result.current.saving).toBe(false)
+    expect(result.current.error).toBeNull()
+  })
+
+  test('saveToDrive shows error when providerToken is null', async () => {
+    chain().limit.mockReturnValue({ ...chain(), data: [] })
+
+    const { result } = renderHook(() => useActiveDocument(null, 'user-1'))
+
+    await waitFor(() => {
+      expect(result.current.initialLoading).toBe(false)
+    })
+
+    await act(async () => {
+      await result.current.saveToDrive('<p>content</p>')
+    })
+
+    expect(result.current.error).toBe('Google Drive access expired. Sign in again to save.')
+  })
+
+  test('saveToDrive shows error when no document is open', async () => {
+    chain().limit.mockReturnValue({ ...chain(), data: [] })
+
+    const { result } = renderHook(() => useActiveDocument('token', 'user-1'))
+
+    await waitFor(() => {
+      expect(result.current.initialLoading).toBe(false)
+    })
+
+    await act(async () => {
+      await result.current.saveToDrive('<p>content</p>')
+    })
+
+    expect(result.current.error).toBe('No document open to save.')
+  })
+
+  test('saveToDrive handles 401 auth expiry on documents.get', async () => {
+    chain().limit.mockReturnValue({ ...chain(), data: [] })
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      text: () => Promise.resolve('<body><p>content</p></body>'),
+    })
+
+    const { result } = renderHook(() => useActiveDocument('token', 'user-1'))
+
+    await waitFor(() => {
+      expect(result.current.initialLoading).toBe(false)
+    })
+
+    await act(async () => {
+      await result.current.selectDocument('gdoc-auth', 'Auth Doc')
+    })
+
+    // Mock documents.get returning 401
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+    })
+
+    await act(async () => {
+      await result.current.saveToDrive('<p>content</p>')
+    })
+
+    expect(result.current.error).toBe('Google Drive access expired. Sign in again to save.')
+    expect(result.current.lastSavedAt).toBeNull()
+    expect(result.current.saving).toBe(false)
+  })
+
+  test('clearDocument resets lastSavedAt', async () => {
+    chain().limit.mockReturnValue({ ...chain(), data: [] })
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      text: () => Promise.resolve('<body><p>content</p></body>'),
+    })
+
+    const { result } = renderHook(() => useActiveDocument('token', 'user-1'))
+
+    await waitFor(() => {
+      expect(result.current.initialLoading).toBe(false)
+    })
+
+    await act(async () => {
+      await result.current.selectDocument('gdoc-clear', 'Clear Doc')
+    })
+
+    // Mock documents.get
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ body: { content: [{ endIndex: 1 }] } }),
+    })
+
+    // Mock documents.batchUpdate
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({}),
+    })
+
+    await act(async () => {
+      await result.current.saveToDrive('<p>content</p>')
+    })
+
+    expect(result.current.lastSavedAt).not.toBeNull()
+
+    act(() => {
+      result.current.clearDocument()
+    })
+
+    expect(result.current.lastSavedAt).toBeNull()
+    expect(result.current.saving).toBe(false)
   })
 })

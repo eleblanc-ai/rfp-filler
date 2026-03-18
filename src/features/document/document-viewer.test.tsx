@@ -14,11 +14,14 @@ const defaultProps = {
   pendingSections: [] as PendingSection[],
   fillResults: [] as FillResult[],
   canRegenerate: false,
+  saving: false,
+  lastSavedAt: null,
   onBack: vi.fn(),
   onAutoFill: vi.fn(),
   onFillSelected: vi.fn(),
   onRegenerate: vi.fn(),
   onContentChange: vi.fn(),
+  onSaveToDrive: vi.fn(),
   onCancelSections: vi.fn(),
   onToggleItem: vi.fn(),
   onToggleSection: vi.fn(),
@@ -466,5 +469,70 @@ describe('DocumentViewer', () => {
       />,
     )
     expect(screen.getByText('Regenerate')).toBeDisabled()
+  })
+
+  test('renders Save to Drive button in toolbar', () => {
+    render(
+      <DocumentViewer
+        {...defaultProps}
+        content="<p>Content</p>"
+        title="Test Doc"
+      />,
+    )
+    expect(screen.getByText('Save to Drive')).toBeInTheDocument()
+  })
+
+  test('Save to Drive button calls onSaveToDrive with editor HTML', async () => {
+    const onSaveToDrive = vi.fn()
+    render(
+      <DocumentViewer
+        {...defaultProps}
+        content="<p>Test content</p>"
+        title="Test Doc"
+        onSaveToDrive={onSaveToDrive}
+      />,
+    )
+    await userEvent.click(screen.getByText('Save to Drive'))
+    expect(onSaveToDrive).toHaveBeenCalledTimes(1)
+    expect(onSaveToDrive.mock.calls[0][0]).toContain('Test content')
+  })
+
+  test('Save to Drive button shows Saving... while saving', () => {
+    render(
+      <DocumentViewer
+        {...defaultProps}
+        content="<p>Content</p>"
+        title="Test Doc"
+        saving={true}
+      />,
+    )
+    expect(screen.getByText('Saving...')).toBeInTheDocument()
+    expect(screen.getByText('Saving...').closest('button')).toBeDisabled()
+  })
+
+  test('shows Saved indicator after successful save', () => {
+    render(
+      <DocumentViewer
+        {...defaultProps}
+        content="<p>Content</p>"
+        title="Test Doc"
+        lastSavedAt="2026-03-18T10:00:00Z"
+      />,
+    )
+    expect(screen.getByText('Saved')).toBeInTheDocument()
+  })
+
+  test('hides Saved indicator while saving', () => {
+    render(
+      <DocumentViewer
+        {...defaultProps}
+        content="<p>Content</p>"
+        title="Test Doc"
+        saving={true}
+        lastSavedAt="2026-03-18T10:00:00Z"
+      />,
+    )
+    expect(screen.queryByText('Saved')).not.toBeInTheDocument()
+    expect(screen.getByText('Saving...')).toBeInTheDocument()
   })
 })

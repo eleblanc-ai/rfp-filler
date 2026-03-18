@@ -38,10 +38,10 @@ function makeSession(email: string): Session {
 }
 
 function TestConsumer() {
-  const { user, loading } = useAuth()
+  const { user, loading, providerToken } = useAuth()
   if (loading) return <div>loading</div>
   if (!user) return <div>signed-out</div>
-  return <div>signed-in:{user.email}</div>
+  return <div>signed-in:{user.email}{providerToken && <span data-testid="provider-token">{providerToken}</span>}</div>
 }
 
 let capturedCallback: AuthCallback
@@ -114,5 +114,25 @@ describe('AuthProvider', () => {
       'useAuth must be used within an AuthProvider',
     )
     spy.mockRestore()
+  })
+
+  test('captures provider_token from SIGNED_IN session and persists to sessionStorage', async () => {
+    render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    )
+
+    const session = {
+      ...makeSession('user@thinkcerca.com'),
+      provider_token: 'google-access-token',
+    }
+
+    await act(async () => {
+      capturedCallback('SIGNED_IN', session)
+    })
+
+    expect(screen.getByTestId('provider-token')).toHaveTextContent('google-access-token')
+    expect(sessionStorage.getItem('google_provider_token')).toBe('google-access-token')
   })
 })

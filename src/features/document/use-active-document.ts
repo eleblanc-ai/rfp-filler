@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../shared/config/supabase'
+import { parseHtml, buildDocsRequests } from './html-to-docs'
 
 const MAX_RECENT = 5
 const ACTIVE_DOC_KEY = 'rfp-buddy-active-doc-id'
@@ -68,6 +69,16 @@ function loadDocState(googleDocId?: string): DocState | null {
   return null
 }
 
+export function stripAiFillMarkup(html: string): string {
+  const container = document.createElement('div')
+  container.innerHTML = html
+  for (const span of container.querySelectorAll('[data-ai-fill]')) {
+    span.removeAttribute('data-ai-fill')
+    ;(span as HTMLElement).style.removeProperty('background-color')
+  }
+  return container.innerHTML
+}
+
 interface SelectedDoc {
   googleDocId: string
   title: string
@@ -116,6 +127,8 @@ export function useActiveDocument(
   const [fillResults, setFillResults] = useState<FillResult[]>(() => loadDocState()?.fillResults ?? [])
   const [lastFillItems, setLastFillItems] = useState<FillItem[]>(() => loadDocState()?.lastFillItems ?? [])
   const [contentVersion, setContentVersion] = useState(0)
+  const [saving, setSaving] = useState(false)
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null)
   const fillingRef = useRef(false)
 
   // Persist state to localStorage per-document
@@ -334,6 +347,8 @@ export function useActiveDocument(
     setFillStatus(null)
     setFillResults([])
     setLastFillItems([])
+    setSaving(false)
+    setLastSavedAt(null)
   }
 
   async function identifySections() {
@@ -472,6 +487,90 @@ export function useActiveDocument(
     setFillResults([])
   }
 
+  async function saveToDrive(editorHtml: string) {
+    if (!providerToken) {
+      setError('Google Drive access expired. Sign in again to save.')
+      return
+    }
+    if (!doc) {
+      setError('No document open to save.')
+      return
+    }
+
+    setSaving(true)
+    setError(null)
+
+    try {
+      const cleanedHtml = stripAiFillMarkup(editorHtml)
+      const paragraphs = parseHtml(cleanedHtml)
+
+      // Get current document structure to find the end index
+      const getResponse = await fetch(
+        `https://docs.googleapis.com/v1/documents/${doc.googleDocId}`,
+        { headers: { Authorization: `Bearer ${providerToken}` } },
+      )
+
+      if (getResponse.status === 401 || getResponse.status === 403) {
+        throw new Error('Google Drive access expired. Sign in again to save.')
+      }
+
+      if (!getResponse.ok) {
+        throw new Error('Failed to read document from Google Drive')
+      }
+
+      const docData = (await getResponse.json()) as {
+        body?: { content?: { endIndex: number }[] }
+      }
+      const bodyContent = docData.body?.content ?? []
+      const endIndex =
+        bodyContent.length > 0
+          ? bodyContent[bodyContent.length - 1].endIndex
+          : 1
+
+      const requests = buildDocsRequests(paragraphs, endIndex)
+
+      if (requests.length > 0) {
+        const updateResponse = await fetch(
+          `https://docs.googleapis.com/v1/documents/${doc.googleDocId}:batchUpdate`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${providerToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ requests }),
+          },
+        )
+
+        if (updateResponse.status === 401 || updateResponse.status === 403) {
+          throw new Error('Google Drive access expired. Sign in again to save.')
+        }
+
+        if (!updateResponse.ok) {
+          throw new Error('Failed to save document to Google Drive')
+        }
+      }
+
+      const now = new Date().toISOString()
+      setLastSavedAt(now)
+
+      if (userId) {
+        // Fire-and-forget metadata update
+        Promise.resolve(
+          supabase
+            .from('documents')
+            .update({ last_synced_at: now, updated_at: now })
+            .eq('user_id', userId)
+            .eq('google_doc_id', doc.googleDocId),
+        ).catch(() => {})
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save document')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return {
     doc,
     content,
@@ -494,6 +593,9 @@ export function useActiveDocument(
     fillSections,
     regenerate,
     updateContent,
+    saveToDrive,
+    saving,
+    lastSavedAt,
     canRegenerate: lastFillItems.length > 0 && !filling,
   }
 }
