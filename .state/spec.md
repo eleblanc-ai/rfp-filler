@@ -23,7 +23,7 @@ A small team of employees at ThinkCERCA (education technology company) who regul
 
 **Recent Documents** — Main page shows up to 5 recently opened documents with click-to-reopen. Users can remove individual entries. Old entries auto-pruned beyond the limit.
 
-**Knowledge Base (RAG)** — In-app knowledge base management page accessible from the header. Users upload reference documents (past proposals, product specs, company info) from their computer or pick files from Google Drive. Documents are chunked, embedded via OpenAI embeddings, and stored in Supabase pgvector for retrieval. Users can view, search, and delete KB documents at any time.
+**Knowledge Base (RAG)** — In-app knowledge base management page accessible from the header. Users upload reference documents (past proposals, product specs, company info) from their computer or pick files from Google Drive. Supports text files (.txt, .md, .csv) and PDFs (.pdf) — PDF text is extracted client-side via pdfjs-dist. Documents are chunked (~500 words, 50-word overlap), embedded via OpenAI embeddings in batches of 100, and stored in Supabase pgvector for retrieval. Database inserts are also batched (100 rows per request) to support large documents. Users can view, search, and delete KB documents at any time.
 
 **AI Auto-Fill** — Claude reads the RFP template, identifies sections needing responses (grouped into major categories), and presents them in an accordion review panel. User approves the selected items, clicks Fill Selected, and Claude generates responses using relevant KB chunks retrieved via vector similarity search. Responses stream directly into the document editor in real time. AI-generated content is wrapped in marked spans (data attributes) to support future track changes functionality.
 

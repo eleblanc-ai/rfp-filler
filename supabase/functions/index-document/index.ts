@@ -10,6 +10,8 @@ const corsHeaders = {
 const CHUNK_SIZE = 500
 const CHUNK_OVERLAP = 50
 const EMBEDDING_MODEL = "text-embedding-3-small"
+const EMBEDDING_BATCH_SIZE = 100
+const INSERT_BATCH_SIZE = 100
 
 function chunkText(text: string): string[] {
   const words = text.split(/\s+/)
@@ -159,7 +161,12 @@ Deno.serve(async (req) => {
       )
     }
 
-    const embeddings = await getEmbeddings(chunks, openaiKey)
+    const embeddings: number[][] = []
+    for (let i = 0; i < chunks.length; i += EMBEDDING_BATCH_SIZE) {
+      const batch = chunks.slice(i, i + EMBEDDING_BATCH_SIZE)
+      const batchEmbeddings = await getEmbeddings(batch, openaiKey)
+      embeddings.push(...batchEmbeddings)
+    }
 
     // Delete existing chunks for this document (re-index)
     await supabase
@@ -167,7 +174,7 @@ Deno.serve(async (req) => {
       .delete()
       .eq("document_id", document_id)
 
-    // Insert new chunks with embeddings
+    // Insert new chunks with embeddings in batches
     const chunkRows = chunks.map((content, index) => ({
       document_id,
       chunk_index: index,
@@ -175,23 +182,26 @@ Deno.serve(async (req) => {
       embedding: JSON.stringify(embeddings[index]),
     }))
 
-    const { error: insertError } = await supabase
-      .from("kb_chunks")
-      .insert(chunkRows)
+    for (let i = 0; i < chunkRows.length; i += INSERT_BATCH_SIZE) {
+      const batch = chunkRows.slice(i, i + INSERT_BATCH_SIZE)
+      const { error: insertError } = await supabase
+        .from("kb_chunks")
+        .insert(batch)
 
-    if (insertError) {
-      await supabase
-        .from("kb_documents")
-        .update({ status: "error" })
-        .eq("id", document_id)
+      if (insertError) {
+        await supabase
+          .from("kb_documents")
+          .update({ status: "error" })
+          .eq("id", document_id)
 
-      return new Response(
-        JSON.stringify({ error: "Failed to store chunks: " + insertError.message }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      )
+        return new Response(
+          JSON.stringify({ error: "Failed to store chunks: " + insertError.message }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        )
+      }
     }
 
     // Update document status and chunk count
