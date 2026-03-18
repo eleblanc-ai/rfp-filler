@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../shared/config/supabase'
 
 const MAX_RECENT = 5
-const SESSION_KEY = 'rfp-buddy-active-doc'
+const ACTIVE_DOC_KEY = 'rfp-buddy-active-doc-id'
+const DOC_PREFIX = 'rfp-buddy-doc-'
 
-interface SessionState {
+interface DocState {
   doc: SelectedDoc
   content: string
   pendingSections: PendingSection[]
@@ -19,7 +20,11 @@ interface FillItem {
   originalText: string
 }
 
-function saveSession(
+function docKey(googleDocId: string) {
+  return DOC_PREFIX + googleDocId
+}
+
+function saveDocState(
   doc: SelectedDoc | null,
   content: string | null,
   sections: PendingSection[],
@@ -28,18 +33,24 @@ function saveSession(
 ) {
   try {
     if (doc && content) {
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify({ doc, content, pendingSections: sections, fillResults: results, lastFillItems }))
+      localStorage.setItem(ACTIVE_DOC_KEY, doc.googleDocId)
+      localStorage.setItem(
+        docKey(doc.googleDocId),
+        JSON.stringify({ doc, content, pendingSections: sections, fillResults: results, lastFillItems }),
+      )
     } else {
-      sessionStorage.removeItem(SESSION_KEY)
+      localStorage.removeItem(ACTIVE_DOC_KEY)
     }
   } catch {
     // best-effort
   }
 }
 
-function loadSession(): SessionState | null {
+function loadDocState(googleDocId?: string): DocState | null {
   try {
-    const raw = sessionStorage.getItem(SESSION_KEY)
+    const id = googleDocId ?? localStorage.getItem(ACTIVE_DOC_KEY)
+    if (!id) return null
+    const raw = localStorage.getItem(docKey(id))
     if (!raw) return null
     const parsed = JSON.parse(raw)
     if (parsed?.doc?.googleDocId && parsed?.content) {
@@ -93,23 +104,23 @@ export function useActiveDocument(
   providerToken: string | null,
   userId: string | null,
 ) {
-  const [doc, setDoc] = useState<SelectedDoc | null>(() => loadSession()?.doc ?? null)
-  const [content, setContent] = useState<string | null>(() => loadSession()?.content ?? null)
+  const [doc, setDoc] = useState<SelectedDoc | null>(() => loadDocState()?.doc ?? null)
+  const [content, setContent] = useState<string | null>(() => loadDocState()?.content ?? null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [initialLoading, setInitialLoading] = useState(true)
   const [recentDocuments, setRecentDocuments] = useState<RecentDocument[]>([])
-  const [pendingSections, setPendingSections] = useState<PendingSection[]>(() => loadSession()?.pendingSections ?? [])
+  const [pendingSections, setPendingSections] = useState<PendingSection[]>(() => loadDocState()?.pendingSections ?? [])
   const [filling, setFilling] = useState(false)
   const [fillStatus, setFillStatus] = useState<string | null>(null)
-  const [fillResults, setFillResults] = useState<FillResult[]>(() => loadSession()?.fillResults ?? [])
-  const [lastFillItems, setLastFillItems] = useState<FillItem[]>(() => loadSession()?.lastFillItems ?? [])
+  const [fillResults, setFillResults] = useState<FillResult[]>(() => loadDocState()?.fillResults ?? [])
+  const [lastFillItems, setLastFillItems] = useState<FillItem[]>(() => loadDocState()?.lastFillItems ?? [])
   const [contentVersion, setContentVersion] = useState(0)
   const fillingRef = useRef(false)
 
-  // Persist doc, content, pendingSections, fillResults, and lastFillItems to sessionStorage
+  // Persist state to localStorage per-document
   useEffect(() => {
-    saveSession(doc, content, pendingSections, fillResults, lastFillItems)
+    saveDocState(doc, content, pendingSections, fillResults, lastFillItems)
   }, [doc, content, pendingSections, fillResults, lastFillItems])
   async function loadRecent() {
     if (!userId) return
@@ -212,6 +223,20 @@ export function useActiveDocument(
   }
 
   async function selectDocument(googleDocId: string, title: string) {
+    // Restore saved state if available for this document
+    const saved = loadDocState(googleDocId)
+    if (saved) {
+      setDoc(saved.doc)
+      setContent(saved.content)
+      setPendingSections(saved.pendingSections)
+      setFillResults(saved.fillResults)
+      setLastFillItems(saved.lastFillItems)
+      setContentVersion((v) => v + 1)
+      setError(null)
+      await persistDocument(googleDocId, title)
+      return
+    }
+
     await fetchContent(googleDocId, title)
     await persistDocument(googleDocId, title)
   }
@@ -299,6 +324,8 @@ export function useActiveDocument(
   }
 
   function clearDocument() {
+    // Clear the active doc pointer but keep per-document state in localStorage
+    localStorage.removeItem(ACTIVE_DOC_KEY)
     setDoc(null)
     setContent(null)
     setError(null)
@@ -306,6 +333,7 @@ export function useActiveDocument(
     setFilling(false)
     setFillStatus(null)
     setFillResults([])
+    setLastFillItems([])
   }
 
   async function identifySections() {

@@ -31,7 +31,7 @@ function chain() {
 describe('useActiveDocument', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    sessionStorage.clear()
+    localStorage.clear()
 
     const c = chain()
     c.select.mockReturnThis()
@@ -390,7 +390,7 @@ describe('useActiveDocument', () => {
     expect(result.current.pendingSections).toHaveLength(0)
   })
 
-  test('restores doc, content, pendingSections, and fillResults from sessionStorage', async () => {
+  test('restores doc, content, pendingSections, and fillResults from localStorage', async () => {
     const saved = {
       doc: { googleDocId: 'gdoc-saved', title: 'Saved Doc' },
       content: '<p>saved content</p>',
@@ -405,8 +405,10 @@ describe('useActiveDocument', () => {
       fillResults: [
         { id: 's1-1', response: 'ThinkCERCA', originalText: 'Company Name' },
       ],
+      lastFillItems: [],
     }
-    sessionStorage.setItem('rfp-buddy-active-doc', JSON.stringify(saved))
+    localStorage.setItem('rfp-buddy-active-doc-id', 'gdoc-saved')
+    localStorage.setItem('rfp-buddy-doc-gdoc-saved', JSON.stringify(saved))
 
     chain().limit.mockReturnValue({ ...chain(), data: [] })
 
@@ -424,13 +426,16 @@ describe('useActiveDocument', () => {
     expect(result.current.fillResults[0]).toEqual({ id: 's1-1', response: 'ThinkCERCA', originalText: 'Company Name' })
   })
 
-  test('clearDocument removes sessionStorage', async () => {
+  test('clearDocument removes active doc pointer but preserves per-document state', async () => {
     const saved = {
       doc: { googleDocId: 'gdoc-saved', title: 'Saved Doc' },
       content: '<p>saved content</p>',
       pendingSections: [],
+      fillResults: [],
+      lastFillItems: [],
     }
-    sessionStorage.setItem('rfp-buddy-active-doc', JSON.stringify(saved))
+    localStorage.setItem('rfp-buddy-active-doc-id', 'gdoc-saved')
+    localStorage.setItem('rfp-buddy-doc-gdoc-saved', JSON.stringify(saved))
 
     chain().limit.mockReturnValue({ ...chain(), data: [] })
 
@@ -447,7 +452,69 @@ describe('useActiveDocument', () => {
     })
 
     expect(result.current.doc).toBeNull()
-    expect(sessionStorage.getItem('rfp-buddy-active-doc')).toBeNull()
+    // Active doc pointer should be removed
+    expect(localStorage.getItem('rfp-buddy-active-doc-id')).toBeNull()
+    // Per-document state should be preserved for later re-opening
+    expect(localStorage.getItem('rfp-buddy-doc-gdoc-saved')).not.toBeNull()
+  })
+
+  test('selectDocument restores from localStorage instead of fetching from Drive', async () => {
+    const saved = {
+      doc: { googleDocId: 'gdoc-cached', title: 'Cached Doc' },
+      content: '<p>cached content</p>',
+      pendingSections: [
+        {
+          id: 's1',
+          location: 'Section 1',
+          expanded: false,
+          items: [{ id: 's1-1', label: 'Item', prompt: 'Do it', originalText: '[Item]', selected: true }],
+        },
+      ],
+      fillResults: [],
+      lastFillItems: [{ id: 's1-1', label: 'Item', prompt: 'Do it', originalText: '[Item]' }],
+    }
+    localStorage.setItem('rfp-buddy-doc-gdoc-cached', JSON.stringify(saved))
+
+    chain().limit.mockReturnValue({ ...chain(), data: [] })
+
+    const { result } = renderHook(() => useActiveDocument('token', 'user-1'))
+
+    await waitFor(() => {
+      expect(result.current.initialLoading).toBe(false)
+    })
+
+    await act(async () => {
+      await result.current.selectDocument('gdoc-cached', 'Cached Doc')
+    })
+
+    // Should restore from localStorage, NOT fetch from Drive
+    expect(mockFetch).not.toHaveBeenCalled()
+    expect(result.current.doc).toEqual({ googleDocId: 'gdoc-cached', title: 'Cached Doc' })
+    expect(result.current.content).toBe('<p>cached content</p>')
+    expect(result.current.pendingSections).toHaveLength(1)
+    expect(result.current.canRegenerate).toBe(true)
+  })
+
+  test('selectDocument fetches from Drive when no localStorage entry exists', async () => {
+    // NO localStorage entries for this doc
+    chain().limit.mockReturnValue({ ...chain(), data: [] })
+
+    const { result } = renderHook(() => useActiveDocument('token', 'user-1'))
+
+    await waitFor(() => {
+      expect(result.current.initialLoading).toBe(false)
+    })
+
+    await act(async () => {
+      await result.current.selectDocument('gdoc-new', 'New Doc')
+    })
+
+    // Should fetch from Drive since no localStorage
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://www.googleapis.com/drive/v3/files/gdoc-new/export?mimeType=text/html',
+      { headers: { Authorization: 'Bearer token' } },
+    )
+    expect(result.current.doc).toEqual({ googleDocId: 'gdoc-new', title: 'New Doc' })
   })
 
   test('fillSections calls auto-fill-generate with all items and returns results', async () => {
